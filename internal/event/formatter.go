@@ -61,14 +61,14 @@ var (
 
 // Action styles — subtle colors matching the target type palette approach.
 var (
-	approveAction = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))   // green
-	closeAction   = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))   // red
-	commentAction = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))   // yellow
-	defaultAction = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))   // white
-	mergeAction   = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))   // magenta
-	openAction    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))   // green
-	pushAction    = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))   // cyan
-	deleteAction  = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))   // red
+	approveAction = lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // green
+	closeAction   = lipgloss.NewStyle().Foreground(lipgloss.Color("1")) // red
+	commentAction = lipgloss.NewStyle().Foreground(lipgloss.Color("3")) // yellow
+	defaultAction = lipgloss.NewStyle().Foreground(lipgloss.Color("7")) // white
+	mergeAction   = lipgloss.NewStyle().Foreground(lipgloss.Color("5")) // magenta
+	openAction    = lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // green
+	pushAction    = lipgloss.NewStyle().Foreground(lipgloss.Color("6")) // cyan
+	deleteAction  = lipgloss.NewStyle().Foreground(lipgloss.Color("1")) // red
 )
 
 // Target type styles — subtle but distinct so you can tell at a glance

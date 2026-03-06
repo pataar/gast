@@ -43,21 +43,21 @@ type Model struct {
 	width    int
 	height   int
 
-	fetching         bool
-	initialFetch     bool // true until the first successful fetch completes
-	manualRefresh    bool // true when user pressed 'r'
-	lastUpdate       time.Time
-	err              error
-	showHelp         bool
-	initialized      bool
-	demo             bool
-	demoEvents       []event.Event
-	consecutiveErrs  int
-	projectFilters   []string // filter events to these project path substrings
-	groupFilters     []string // filter events to these group path prefixes
-	displayItems     []displayItem
-	selectedIdx      int
-	mentionCount     int  // unread @mention count
+	fetching        bool
+	initialFetch    bool // true until the first successful fetch completes
+	manualRefresh   bool // true when user pressed 'r'
+	lastUpdate      time.Time
+	err             error
+	showHelp        bool
+	initialized     bool
+	demo            bool
+	demoEvents      []event.Event
+	consecutiveErrs int
+	projectFilters  []string // filter events to these project path substrings
+	groupFilters    []string // filter events to these group path prefixes
+	displayItems    []displayItem
+	selectedIdx     int
+	mentionCount    int // unread @mention count
 }
 
 // NewModel creates a new TUI model wired to the given GitLab client and config.
