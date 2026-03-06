@@ -16,6 +16,7 @@ import (
 	"github.com/pataar/gast/internal/config"
 	"github.com/pataar/gast/internal/event"
 	"github.com/pataar/gast/internal/gitlab"
+	"github.com/pataar/gast/internal/notify"
 )
 
 // maxEvents is the upper bound on events kept in memory. Older events beyond
@@ -56,6 +57,7 @@ type Model struct {
 	groupFilters     []string // filter events to these group path prefixes
 	displayItems     []displayItem
 	selectedIdx      int
+	mentionCount     int  // unread @mention count
 }
 
 // NewModel creates a new TUI model wired to the given GitLab client and config.
@@ -129,6 +131,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastUpdate = time.Now()
 		m.err = nil
 		m.consecutiveErrs = 0
+		m.checkMentions(msg.Events)
 		m.mergeEvents(msg.Events)
 		m.buildDisplayItems()
 		// Select the newest item (last) on new events.
@@ -194,6 +197,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.Up):
+			m.mentionCount = 0
 			if m.selectedIdx > 0 {
 				m.selectedIdx--
 				m.viewport.SetContent(m.renderEvents())
@@ -201,6 +205,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.Down):
+			m.mentionCount = 0
 			if m.selectedIdx < len(m.displayItems)-1 {
 				m.selectedIdx++
 				m.viewport.SetContent(m.renderEvents())
@@ -277,6 +282,9 @@ func (m Model) View() tea.View {
 
 func (m Model) renderHeader() string {
 	title := headerStyle.Render("GitLab Activity Stream")
+	if m.mentionCount > 0 {
+		title += " " + mentionBadgeStyle.Render(fmt.Sprintf(" @%d ", m.mentionCount))
+	}
 
 	right := ""
 	if m.fetching && (m.initialFetch || m.manualRefresh) {
@@ -440,6 +448,31 @@ func (m Model) fetchCmd() tea.Cmd {
 		after = &t
 	}
 	return fetchEventsCmd(m.client, after, m.cfg.PageSize)
+}
+
+// checkMentions scans new events for @mentions of the current user. When found,
+// increments the mention counter and optionally sends a desktop notification.
+func (m *Model) checkMentions(newEvents []event.Event) {
+	if event.CurrentUser == "" {
+		return
+	}
+	mention := "@" + event.CurrentUser
+	for _, e := range newEvents {
+		if _, seen := m.seenIDs[e.ID]; seen {
+			continue
+		}
+		if e.AuthorUsername == event.CurrentUser {
+			continue
+		}
+		if !strings.Contains(e.NoteBody, mention) {
+			continue
+		}
+		m.mentionCount++
+		if m.cfg != nil && m.cfg.Notifications {
+			body := notify.FormatMention(e.AuthorUsername, e.ProjectName, e.NoteBody)
+			_ = notify.Send("gast — @mention", body)
+		}
+	}
 }
 
 // buildDisplayItems creates the list of visual display items from the raw

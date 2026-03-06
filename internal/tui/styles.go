@@ -35,4 +35,9 @@ var (
 	selectedIndicatorStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("5")).
 				Bold(true)
+
+	mentionBadgeStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("3")).
+				Foreground(lipgloss.Color("0")).
+				Bold(true)
 )
