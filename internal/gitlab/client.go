@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/pataar/gast/internal/event"
-	gl "github.com/xanzy/go-gitlab"
+	gl "gitlab.com/gitlab-org/api/client-go"
 )
 
 // Client wraps the go-gitlab API client and maintains a cache of project ID

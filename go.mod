@@ -8,7 +8,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
-	github.com/xanzy/go-gitlab v0.115.0
+	gitlab.com/gitlab-org/api/client-go v1.46.0
 )
 
 require (

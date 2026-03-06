@@ -42,7 +42,7 @@ internal/
 ## Dependencies
 
 - **TUI**: `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `charm.land/bubbles/v2`
-- **GitLab API**: `github.com/xanzy/go-gitlab` (for project resolution only; events use raw HTTP for `scope=all` support)
+- **GitLab API**: `gitlab.com/gitlab-org/api/client-go` (for project resolution only; events use raw HTTP for `scope=all` support)
 - **CLI/config**: `github.com/spf13/cobra`, `github.com/spf13/viper`
 
 ## Charm v2 API Conventions
