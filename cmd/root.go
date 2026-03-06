@@ -4,9 +4,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/pataar/gast/internal/config"
+	"github.com/pataar/gast/internal/demo"
+	"github.com/pataar/gast/internal/event"
 	"github.com/pataar/gast/internal/gitlab"
 	"github.com/pataar/gast/internal/tui"
 	"github.com/spf13/cobra"
@@ -15,6 +18,9 @@ import (
 
 // cfgFile holds the path to the configuration file provided via the --config flag.
 var cfgFile string
+
+// demoMode enables demo mode with fake data (no GitLab connection needed).
+var demoMode bool
 
 // rootCmd is the top-level cobra command that launches the TUI.
 var rootCmd = &cobra.Command{
@@ -29,6 +35,7 @@ func init() {
 	rootCmd.Flags().String("host", "", "GitLab host URL")
 	rootCmd.Flags().String("token", "", "GitLab personal access token")
 	rootCmd.Flags().Duration("interval", 0, "poll interval (e.g. 30s)")
+	rootCmd.Flags().BoolVar(&demoMode, "demo", false, "run with fake data (no GitLab connection)")
 
 	viper.BindPFlag("gitlab_host", rootCmd.Flags().Lookup("host"))
 	viper.BindPFlag("token", rootCmd.Flags().Lookup("token"))
@@ -37,6 +44,10 @@ func init() {
 
 // run loads configuration, initializes the GitLab client, and starts the Bubble Tea program.
 func run(cmd *cobra.Command, args []string) error {
+	if demoMode {
+		return runDemo()
+	}
+
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		return fmt.Errorf("configuration error: %w", err)
@@ -52,6 +63,25 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	model := tui.NewModel(client, cfg)
+	p := tea.NewProgram(model)
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	return nil
+}
+
+// runDemo starts the TUI with fake data and no GitLab connection.
+func runDemo() error {
+	event.CurrentUser = "pieter.willekens"
+	cfg := &config.Config{
+		PollInterval: 30 * time.Second,
+		PageSize:     50,
+		Username:     "pieter.willekens",
+	}
+
+	model := tui.NewDemoModel(cfg, demo.Events())
 	p := tea.NewProgram(model)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

@@ -39,6 +39,8 @@ type Model struct {
 	err         error
 	showHelp    bool
 	initialized bool
+	demo        bool
+	demoEvents  []event.Event
 }
 
 // NewModel creates a new TUI model wired to the given GitLab client and config.
@@ -57,9 +59,29 @@ func NewModel(client *gitlab.Client, cfg *config.Config) Model {
 	}
 }
 
+// NewDemoModel creates a TUI model pre-loaded with fake events (no GitLab client).
+func NewDemoModel(cfg *config.Config, events []event.Event) Model {
+	s := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(spinnerStyle))
+	event.CurrentUser = cfg.Username
+
+	return Model{
+		cfg:        cfg,
+		seenIDs:    make(map[int]struct{}),
+		spinner:    s,
+		keys:       defaultKeyMap(),
+		demo:       true,
+		demoEvents: events,
+	}
+}
+
 // Init starts the spinner animation, triggers the first event fetch, and
 // schedules the first polling tick.
 func (m Model) Init() tea.Cmd {
+	if m.demo {
+		return func() tea.Msg {
+			return EventsFetchedMsg{Events: m.demoEvents}
+		}
+	}
 	return tea.Batch(
 		m.spinner.Tick,
 		fetchEventsCmd(m.client, nil, m.cfg.PageSize),
@@ -99,8 +121,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetContent(m.renderEvents())
 			m.viewport.GotoBottom()
 		}
-		// Schedule the next poll after a successful fetch.
-		cmds = append(cmds, tickCmd(m.cfg.PollInterval))
+		// Schedule the next poll after a successful fetch (skip in demo mode).
+		if !m.demo {
+			cmds = append(cmds, tickCmd(m.cfg.PollInterval))
+		}
 
 	case FetchErrorMsg:
 		m.fetching = false
