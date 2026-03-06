@@ -2,6 +2,16 @@
 
 **G**itLab **A**ctivity **S**tream **T**UI — a terminal dashboard that mirrors your GitLab activity feed with live polling.
 
+![gast screenshot](assets/screenshot.png)
+
+## Features
+
+- Live-updating feed of all GitLab project activity (pushes, merges, comments, issues, approvals)
+- Color-coded events for quick scanning
+- Project names and timestamps at a glance
+- Configurable poll interval and page size
+- Keyboard-driven navigation
+
 ## Install
 
 ### Homebrew
@@ -16,6 +26,10 @@ brew install pataar/tap/gast
 go install github.com/pataar/gast@latest
 ```
 
+### Binary releases
+
+Download pre-built binaries from the [Releases](https://github.com/pataar/gast/releases) page.
+
 ### From source
 
 ```bash
@@ -23,10 +37,6 @@ git clone https://github.com/pataar/gast.git
 cd gast
 go build -o gast .
 ```
-
-### Binary releases
-
-Download pre-built binaries from the [Releases](https://github.com/pataar/gast/releases) page.
 
 ## Quick start
 
@@ -36,7 +46,7 @@ Run the interactive configuration wizard:
 gast configure
 ```
 
-This will prompt for your GitLab host, token, poll interval, and page size — validate everything (including a test API call) — and write the config to `~/.config/gast/config.toml`.
+This prompts for your GitLab host, personal access token, poll interval, and page size — validates everything (including a test API call) — and writes the config to `~/.config/gast/config.toml`.
 
 Then start the TUI:
 
@@ -55,7 +65,7 @@ poll_interval = "30s"
 page_size = 50
 ```
 
-The token needs `read_api` scope (or `api`).
+The token needs the `read_api` scope (or `api`).
 
 ### Environment variable overrides
 
@@ -86,18 +96,6 @@ Priority order: CLI flags > environment variables > config file > defaults.
 | `r` | Force refresh |
 | `?` | Toggle help |
 | `q` / `Ctrl+C` | Quit |
-
-## Screenshot
-
-```
- GitLab Activity Stream         Last updated: 12:34:56    ↻ 30s
-──────────────────────────────────────────────────────────────────
- 14:32 alice pushed 3 commits to main on mygroup/backend
- 14:30 bob opened MR !142 "Add caching layer" on mygroup/api
- 14:28 carol commented on issue #77 "Login fails" on mygroup/web
-──────────────────────────────────────────────────────────────────
- q quit  j/k scroll  r refresh  ? help               50 events
-```
 
 ## License
 
