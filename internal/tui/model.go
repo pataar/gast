@@ -61,17 +61,10 @@ func NewModel(client *gitlab.Client, cfg *config.Config) Model {
 
 // NewDemoModel creates a TUI model pre-loaded with fake events (no GitLab client).
 func NewDemoModel(cfg *config.Config, events []event.Event) Model {
-	s := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(spinnerStyle))
-	event.CurrentUser = cfg.Username
-
-	return Model{
-		cfg:        cfg,
-		seenIDs:    make(map[int]struct{}),
-		spinner:    s,
-		keys:       defaultKeyMap(),
-		demo:       true,
-		demoEvents: events,
-	}
+	m := NewModel(nil, cfg)
+	m.demo = true
+	m.demoEvents = events
+	return m
 }
 
 // Init starts the spinner animation, triggers the first event fetch, and

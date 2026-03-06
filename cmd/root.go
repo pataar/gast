@@ -9,7 +9,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/pataar/gast/internal/config"
 	"github.com/pataar/gast/internal/demo"
-	"github.com/pataar/gast/internal/event"
 	"github.com/pataar/gast/internal/gitlab"
 	"github.com/pataar/gast/internal/tui"
 	"github.com/spf13/cobra"
@@ -63,18 +62,11 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	model := tui.NewModel(client, cfg)
-	p := tea.NewProgram(model)
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
-	return nil
+	return runTUI(model)
 }
 
 // runDemo starts the TUI with fake data and no GitLab connection.
 func runDemo() error {
-	event.CurrentUser = "pieter.willekens"
 	cfg := &config.Config{
 		PollInterval: 30 * time.Second,
 		PageSize:     50,
@@ -82,12 +74,16 @@ func runDemo() error {
 	}
 
 	model := tui.NewDemoModel(cfg, demo.Events())
+	return runTUI(model)
+}
+
+// runTUI starts a Bubble Tea program with the given model.
+func runTUI(model tea.Model) error {
 	p := tea.NewProgram(model)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-
 	return nil
 }
 
