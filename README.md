@@ -7,10 +7,11 @@
 ## Features
 
 - Live-updating feed of all GitLab project activity (pushes, merges, comments, issues, approvals)
-- Color-coded events for quick scanning
-- Project names and timestamps at a glance
-- Configurable poll interval and page size
-- Keyboard-driven navigation
+- Color-coded events with per-author coloring
+- Open events or projects directly in the browser
+- @mention notifications (in-app badge + optional desktop alerts)
+- Filter by project or group
+- Mouse and keyboard navigation
 
 ## Install
 
@@ -46,7 +47,7 @@ Run the interactive configuration wizard:
 gast configure
 ```
 
-This prompts for your GitLab host, personal access token, poll interval, and page size — validates everything (including a test API call) — and writes the config to `~/.config/gast/config.toml`.
+This prompts for your GitLab host, personal access token, poll interval, page size, full project path preference, and desktop notifications — validates everything (including a test API call) — and writes the config to `~/.config/gast/config.toml`.
 
 Then start the TUI:
 
@@ -60,9 +61,11 @@ Config file location: `~/.config/gast/config.toml` (follows [XDG Base Directory]
 
 ```toml
 gitlab_host = "https://gitlab.example.com"
-token = "glpat-xxxxxxxxxxxxxxxxxxxx"
-poll_interval = "30s"
+notifications = false
 page_size = 50
+poll_interval = "30s"
+show_full_project_path = false
+token = "glpat-xxxxxxxxxxxxxxxxxxxx"
 ```
 
 The token needs the `read_api` scope (or `api`).
@@ -79,23 +82,43 @@ The token needs the `read_api` scope (or `api`).
 ### CLI flags
 
 ```
---config    Path to config file
---host      GitLab host URL
---token     GitLab personal access token
---interval  Poll interval (e.g. 30s, 1m)
+--config             Path to config file
+--host               GitLab host URL
+--token              GitLab personal access token
+--interval           Poll interval (e.g. 30s, 1m)
+--full-project-path  Show full project path instead of short name
+--project            Filter to projects matching these names (comma-separated)
+--group              Filter to groups matching these prefixes (comma-separated)
+--demo               Run with fake data (no GitLab connection)
 ```
 
 Priority order: CLI flags > environment variables > config file > defaults.
+
+### Filtering
+
+Show only events from specific projects or groups:
+
+```bash
+gast --project notification-service,dashboard
+gast --group acme/backend
+```
+
+Projects match by substring, groups match by path prefix.
 
 ## Keybindings
 
 | Key | Action |
 |---|---|
-| `j` / `k` | Scroll down / up |
-| `g` / `G` | Go to top / bottom |
+| `j` / `k` | Select next / previous event |
+| `g` / `G` | Select first / last event |
+| `o` / `Enter` | Open selected event in browser |
+| `p` | Open project page in browser |
 | `r` | Force refresh |
+| `t` | Toggle relative / absolute timestamps |
 | `?` | Toggle help |
 | `q` / `Ctrl+C` | Quit |
+
+Mouse wheel scrolling is also supported.
 
 ## License
 

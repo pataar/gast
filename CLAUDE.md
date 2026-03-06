@@ -23,8 +23,11 @@ cmd/
   root.go                        # Root cobra command, CLI flags, starts TUI
   configure.go                   # `gast configure` interactive wizard
 internal/
+  browser/open.go                # Cross-platform browser opening, URL construction
   config/config.go               # Config struct, Load() from XDG path, env overrides
+  demo/events.go                 # Fake event data for --demo mode
   gitlab/client.go               # Raw HTTP client for GET /events?scope=all, project cache
+  notify/notify.go               # Cross-platform desktop notifications (macOS/Linux)
   event/
     types.go                     # Domain types: Event, PushData
     formatter.go                 # Lipgloss-styled per-action-type rendering
@@ -32,7 +35,7 @@ internal/
     model.go                     # Bubbletea Model (Init/Update/View), polling lifecycle
     messages.go                  # EventsFetchedMsg, FetchErrorMsg, TickMsg
     commands.go                  # fetchEventsCmd, tickCmd
-    keymap.go                    # Key bindings (q, j/k, r, ?, g/G)
+    keymap.go                    # Key bindings (j/k, o, p, r, t, ?, g/G, q)
     styles.go                    # Lipgloss style definitions
 ```
 
@@ -55,8 +58,18 @@ internal/
 
 - File: `~/.config/gast/config.toml` (XDG via `os.UserConfigDir()`)
 - Env overrides: `GITLAB_ACTIVITY_HOST`, `GITLAB_ACTIVITY_TOKEN`, `GITLAB_ACTIVITY_INTERVAL`, `GITLAB_ACTIVITY_PAGE_SIZE`
+- Config fields: `gitlab_host`, `token`, `poll_interval`, `page_size`, `show_full_project_path`, `notifications`
 - Priority: CLI flags > env vars > config file > defaults
 - Run `gast configure` for interactive setup with validation
+
+## Key Features
+
+- Event selection with cursor (j/k) — `o`/`Enter` opens in browser, `p` opens project
+- @mention detection with header badge + optional desktop notifications (`notifications = true`)
+- Togglable relative timestamps (`t` key)
+- Project/group filtering via `--project` and `--group` CLI flags
+- Mouse wheel scrolling, exponential backoff on errors, silent background polling
+- Demo mode (`--demo`) for screenshots
 
 ## GitLab API
 
