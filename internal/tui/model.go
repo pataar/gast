@@ -182,6 +182,7 @@ func (m Model) View() tea.View {
 	if !m.initialized {
 		v := tea.NewView(fmt.Sprintf("\n %s Loading...\n", m.spinner.View()))
 		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
 		return v
 	}
 
@@ -199,6 +200,7 @@ func (m Model) View() tea.View {
 
 	v := tea.NewView(b.String())
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 
