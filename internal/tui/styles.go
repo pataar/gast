@@ -31,4 +31,8 @@ var (
 
 	helpStyle = lipgloss.NewStyle().
 			PaddingLeft(2)
+
+	selectedIndicatorStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("5")).
+				Bold(true)
 )

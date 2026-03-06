@@ -21,6 +21,13 @@ import (
 // this limit are discarded to prevent unbounded memory growth.
 const maxEvents = 500
 
+// displayItem represents a visual item in the event list. A single item may
+// represent one event or a group of push events to the same commit.
+type displayItem struct {
+	primaryEvent event.Event // the representative event for this item
+	groupedRefs  []string    // branch refs for grouped push events (len > 1 means grouped)
+}
+
 // Model is the Bubble Tea model that manages application state including the
 // event list, viewport, spinner, and polling lifecycle.
 type Model struct {
@@ -46,6 +53,8 @@ type Model struct {
 	consecutiveErrs  int
 	projectFilters   []string // filter events to these project path substrings
 	groupFilters     []string // filter events to these group path prefixes
+	displayItems     []displayItem
+	selectedIdx      int
 }
 
 // NewModel creates a new TUI model wired to the given GitLab client and config.
@@ -120,6 +129,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		m.consecutiveErrs = 0
 		m.mergeEvents(msg.Events)
+		m.buildDisplayItems()
+		// Select the newest item (last) on new events.
+		if len(m.displayItems) > 0 {
+			m.selectedIdx = len(m.displayItems) - 1
+		}
 		if m.initialized {
 			m.viewport.SetContent(m.renderEvents())
 			m.viewport.GotoBottom()
@@ -166,10 +180,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.SetContent(m.renderEvents())
 			}
 			return m, nil
+		case key.Matches(msg, m.keys.Up):
+			if m.selectedIdx > 0 {
+				m.selectedIdx--
+				m.viewport.SetContent(m.renderEvents())
+				m.scrollToSelected()
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.Down):
+			if m.selectedIdx < len(m.displayItems)-1 {
+				m.selectedIdx++
+				m.viewport.SetContent(m.renderEvents())
+				m.scrollToSelected()
+			}
+			return m, nil
 		case key.Matches(msg, m.keys.GoTop):
+			m.selectedIdx = 0
+			m.viewport.SetContent(m.renderEvents())
 			m.viewport.GotoTop()
 			return m, nil
 		case key.Matches(msg, m.keys.GoBottom):
+			if len(m.displayItems) > 0 {
+				m.selectedIdx = len(m.displayItems) - 1
+			}
+			m.viewport.SetContent(m.renderEvents())
 			m.viewport.GotoBottom()
 			return m, nil
 		}
@@ -184,10 +218,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Forward non-key messages to the viewport (window size, mouse wheel, etc.)
+	// but not key messages — we handle those ourselves for event selection.
 	if m.initialized && !m.showHelp {
-		var cmd tea.Cmd
-		m.viewport, cmd = m.viewport.Update(msg)
-		cmds = append(cmds, cmd)
+		switch msg.(type) {
+		case tea.KeyMsg:
+			// Handled above via key bindings — don't forward to viewport.
+		default:
+			var cmd tea.Cmd
+			m.viewport, cmd = m.viewport.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -246,7 +287,7 @@ func (m Model) renderDivider() string {
 }
 
 func (m Model) renderFooter() string {
-	left := " q quit  j/k scroll  r refresh  t time  ? help"
+	left := " j/k select  o open  r refresh  t time  ? help  q quit"
 
 	eventCount := fmt.Sprintf("%d events", len(m.events))
 	if m.err != nil {
@@ -262,35 +303,40 @@ func (m Model) renderFooter() string {
 }
 
 func (m Model) renderEvents() string {
-	if len(m.events) == 0 {
+	if len(m.displayItems) == 0 {
 		return "\n  No events yet. Waiting for first fetch..."
 	}
 
-	var blocks []string
-	for i := 0; i < len(m.events); {
-		e := m.events[i]
-		key := event.PushGroupKey(e)
+	// Leave 2 chars for the selection indicator prefix.
+	contentWidth := m.width - 2
+	if contentWidth < 10 {
+		contentWidth = 10
+	}
 
-		// Group consecutive push events with the same author + commit title.
-		if key != "" {
-			refs := []string{e.PushData.Ref}
-			j := i + 1
-			for j < len(m.events) && event.PushGroupKey(m.events[j]) == key {
-				refs = append(refs, m.events[j].PushData.Ref)
-				j++
-			}
-			if len(refs) > 1 {
-				blocks = append(blocks, event.FormatGroupedPush(e, refs, m.width))
-				i = j
-				continue
-			}
+	var blocks []string
+	for i, item := range m.displayItems {
+		var block string
+		if len(item.groupedRefs) > 1 {
+			block = event.FormatGroupedPush(item.primaryEvent, item.groupedRefs, contentWidth)
+		} else {
+			block = event.FormatEvent(item.primaryEvent, contentWidth)
 		}
 
-		blocks = append(blocks, event.FormatEvent(e, m.width))
-		i++
+		// Add selection indicator.
+		prefix := "  "
+		if i == m.selectedIdx {
+			prefix = selectedIndicatorStyle.Render("▸ ")
+		}
+		lines := strings.Split(block, "\n")
+		for j, line := range lines {
+			if j == 0 {
+				lines[j] = prefix + line
+			} else {
+				lines[j] = "  " + line
+			}
+		}
+		blocks = append(blocks, strings.Join(lines, "\n"))
 	}
-	// Separate events with a thin dimmed dotted line for visual clarity
-	// without taking too much vertical space.
 	sep := dividerStyle.Render(strings.Repeat("┄", m.width))
 	return strings.Join(blocks, "\n"+sep+"\n")
 }
@@ -302,10 +348,11 @@ func (m Model) renderHelp() string {
 	b.WriteString("\n\n")
 
 	bindings := []struct{ key, desc string }{
-		{"j / down", "Scroll down"},
-		{"k / up", "Scroll up"},
-		{"g / Home", "Go to top"},
-		{"G / End", "Go to bottom"},
+		{"j / down", "Select next event"},
+		{"k / up", "Select previous event"},
+		{"g / Home", "Select first event"},
+		{"G / End", "Select last event"},
+		{"o / Enter", "Open event in browser"},
 		{"r", "Force refresh"},
 		{"t", "Toggle relative/absolute time"},
 		{"?", "Toggle this help"},
@@ -319,6 +366,43 @@ func (m Model) renderHelp() string {
 	}
 
 	return b.String()
+}
+
+// scrollToSelected adjusts the viewport offset to keep the selected item visible.
+func (m *Model) scrollToSelected() {
+	// Calculate the line offset of the selected item by counting lines of
+	// all preceding items plus separators.
+	lineOffset := 0
+	for i := 0; i < m.selectedIdx && i < len(m.displayItems); i++ {
+		lineOffset += m.itemLineCount(i)
+		lineOffset++ // separator line between items
+	}
+	selectedLines := m.itemLineCount(m.selectedIdx)
+
+	// If the selected item is above the viewport, scroll up to it.
+	if lineOffset < m.viewport.YOffset() {
+		m.viewport.SetYOffset(lineOffset)
+	}
+	// If the selected item is below the viewport, scroll down so it's visible.
+	vpHeight := m.viewport.Height()
+	if lineOffset+selectedLines > m.viewport.YOffset()+vpHeight {
+		m.viewport.SetYOffset(lineOffset + selectedLines - vpHeight)
+	}
+}
+
+// itemLineCount returns the number of rendered lines for a display item.
+func (m Model) itemLineCount(idx int) int {
+	if idx < 0 || idx >= len(m.displayItems) {
+		return 1
+	}
+	item := m.displayItems[idx]
+	e := item.primaryEvent
+	lines := 1
+	if e.NoteBody != "" || (e.PushData != nil && e.PushData.CommitTitle != "") ||
+		(e.TargetTitle != "" && event.HasDetailTarget(e.TargetType)) {
+		lines = 2
+	}
+	return lines
 }
 
 // backoffInterval returns the retry interval with exponential backoff based on
@@ -343,6 +427,33 @@ func (m Model) fetchCmd() tea.Cmd {
 		after = &t
 	}
 	return fetchEventsCmd(m.client, after, m.cfg.PageSize)
+}
+
+// buildDisplayItems creates the list of visual display items from the raw
+// event list, grouping consecutive push events with the same author+commit.
+func (m *Model) buildDisplayItems() {
+	m.displayItems = m.displayItems[:0]
+	for i := 0; i < len(m.events); {
+		e := m.events[i]
+		k := event.PushGroupKey(e)
+
+		if k != "" {
+			refs := []string{e.PushData.Ref}
+			j := i + 1
+			for j < len(m.events) && event.PushGroupKey(m.events[j]) == k {
+				refs = append(refs, m.events[j].PushData.Ref)
+				j++
+			}
+			if len(refs) > 1 {
+				m.displayItems = append(m.displayItems, displayItem{primaryEvent: e, groupedRefs: refs})
+				i = j
+				continue
+			}
+		}
+
+		m.displayItems = append(m.displayItems, displayItem{primaryEvent: e})
+		i++
+	}
 }
 
 // SetFilters configures project and group filters. Events whose ProjectName

@@ -136,7 +136,7 @@ func FormatEvent(e Event, width int) string {
 		line += "\n " + detailStyle.Render("↳ ") + highlightMentions(snippet)
 	} else if e.PushData != nil && e.PushData.CommitTitle != "" {
 		line += "\n " + detailStyle.Render("↳ "+truncate(e.PushData.CommitTitle, detailMax))
-	} else if e.TargetTitle != "" && hasDetailTarget(e.TargetType) {
+	} else if e.TargetTitle != "" && HasDetailTarget(e.TargetType) {
 		line += "\n " + detailStyle.Render("↳ "+truncate(e.TargetTitle, detailMax))
 	}
 
@@ -145,7 +145,7 @@ func FormatEvent(e Event, width int) string {
 
 // hasDetailTarget returns true for target types that benefit from showing
 // their title on a separate detail line.
-func hasDetailTarget(targetType string) bool {
+func HasDetailTarget(targetType string) bool {
 	switch strings.ToLower(targetType) {
 	case "issue", "mergerequest", "workitem":
 		return true
@@ -352,7 +352,7 @@ func targetLabel(e Event) string {
 	}
 
 	// Show title inline only for types that don't get a detail line.
-	if e.TargetTitle != "" && !hasDetailTarget(e.TargetType) {
+	if e.TargetTitle != "" && !HasDetailTarget(e.TargetType) {
 		title := truncate(e.TargetTitle, 50)
 		parts = append(parts, titleStyle.Render(fmt.Sprintf("%q", title)))
 	}
