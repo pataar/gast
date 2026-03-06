@@ -24,6 +24,7 @@ type Event struct {
 	NoteBody       string // Snippet of the comment body (for "commented on" events).
 	NoteableType   string // Parent type for notes: "Issue", "MergeRequest", etc.
 	NoteableIID    int    // Parent IID for notes (may differ from TargetIID).
+	ProjectID      int64
 	ProjectName    string
 	PushData       *PushData
 	TargetIID      int

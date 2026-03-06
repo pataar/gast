@@ -19,6 +19,14 @@ func fetchEventsCmd(client *gitlab.Client, after *time.Time, pageSize int) tea.C
 	}
 }
 
+// resolveCommitTitleCmd fetches the full commit title in the background.
+func resolveCommitTitleCmd(client *gitlab.Client, eventID int, projectID int64, sha, fallback string) tea.Cmd {
+	return func() tea.Msg {
+		title := client.ResolveCommitTitle(projectID, sha, fallback)
+		return CommitTitleMsg{EventID: eventID, Title: title}
+	}
+}
+
 // tickCmd returns a Bubble Tea command that sends a TickMsg after the given
 // interval, driving the periodic polling loop.
 func tickCmd(interval time.Duration) tea.Cmd {

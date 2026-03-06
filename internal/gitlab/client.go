@@ -12,11 +12,16 @@ import (
 	gl "gitlab.com/gitlab-org/api/client-go"
 )
 
+// maxCommitCache is the upper bound on cached commit titles. When exceeded,
+// the cache is cleared to reclaim memory.
+const maxCommitCache = 256
+
 // Client wraps the go-gitlab API client and maintains a cache of project ID
 // to path-with-namespace mappings to reduce API calls.
 type Client struct {
 	api          *gl.Client
 	projectCache map[int64]string
+	commitCache  map[string]string // "projectID:sha" → full title
 	mu           sync.RWMutex
 }
 
@@ -30,6 +35,7 @@ func NewClient(host, token string) (*Client, error) {
 	return &Client{
 		api:          api,
 		projectCache: make(map[int64]string),
+		commitCache:  make(map[string]string),
 	}, nil
 }
 
@@ -94,6 +100,7 @@ func (c *Client) FetchEvents(after *time.Time, pageSize int) ([]event.Event, err
 			e.NoteableIID = int(re.Note.NoteableIID)
 		}
 
+		e.ProjectID = re.ProjectID
 		e.ProjectName = c.resolveProject(re.ProjectID)
 		events = append(events, e)
 	}
@@ -115,6 +122,34 @@ func (c *Client) CurrentUsername() (string, error) {
 		return "", err
 	}
 	return user.Username, nil
+}
+
+// ResolveCommitTitle fetches the full commit title for a given project and SHA.
+// Results are cached to avoid redundant API calls. Returns the original title
+// if the fetch fails.
+func (c *Client) ResolveCommitTitle(projectID int64, sha, fallback string) string {
+	key := fmt.Sprintf("%d:%s", projectID, sha)
+
+	c.mu.RLock()
+	title, ok := c.commitCache[key]
+	c.mu.RUnlock()
+	if ok {
+		return title
+	}
+
+	commit, _, err := c.api.Commits.GetCommit(projectID, sha, &gl.GetCommitOptions{})
+	if err != nil {
+		return fallback
+	}
+
+	c.mu.Lock()
+	if len(c.commitCache) >= maxCommitCache {
+		c.commitCache = make(map[string]string)
+	}
+	c.commitCache[key] = commit.Title
+	c.mu.Unlock()
+
+	return commit.Title
 }
 
 // resolveProject looks up a project's path-with-namespace by its ID, using

@@ -149,6 +149,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if len(m.displayItems) > 0 {
 			m.selectedIdx = len(m.displayItems) - 1
 		}
+		// Lazily resolve truncated commit titles in the background.
+		cmds = append(cmds, m.resolveCommitTitles(msg.Events))
 		// Schedule the next poll after a successful fetch (skip in demo mode).
 		if !m.demo {
 			cmds = append(cmds, tickCmd(m.cfg.PollInterval))
@@ -159,6 +161,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.Err
 		m.consecutiveErrs++
 		cmds = append(cmds, tickCmd(m.backoffInterval()))
+
+	case CommitTitleMsg:
+		// Update the commit title on the matching event and rebuild display.
+		for i := range m.events {
+			if m.events[i].ID == msg.EventID && m.events[i].PushData != nil {
+				m.events[i].PushData.CommitTitle = msg.Title
+				break
+			}
+		}
+		m.buildDisplayItems()
+		if m.initialized {
+			m.viewport.SetContent(m.renderEvents())
+		}
 
 	case TickMsg:
 		m.fetching = true
@@ -269,7 +284,6 @@ func (m Model) View() tea.View {
 	if !m.initialized {
 		v := tea.NewView(fmt.Sprintf("\n %s Loading...\n", m.spinner.View()))
 		v.AltScreen = true
-		v.MouseMode = tea.MouseModeCellMotion
 		return v
 	}
 
@@ -287,7 +301,6 @@ func (m Model) View() tea.View {
 
 	v := tea.NewView(b.String())
 	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 
@@ -421,6 +434,25 @@ func (m *Model) scrollToSelected() {
 	if lineOffset+selectedLines > m.viewport.YOffset()+vpHeight {
 		m.viewport.SetYOffset(lineOffset + selectedLines - vpHeight)
 	}
+}
+
+// resolveCommitTitles returns commands to fetch full titles for any push events
+// with truncated commit titles (ending in "..."). Called after events are fetched.
+func (m Model) resolveCommitTitles(newEvents []event.Event) tea.Cmd {
+	if m.client == nil {
+		return nil
+	}
+	var cmds []tea.Cmd
+	for _, e := range newEvents {
+		if e.PushData == nil || e.PushData.CommitTo == "" {
+			continue
+		}
+		if !strings.HasSuffix(e.PushData.CommitTitle, "...") {
+			continue
+		}
+		cmds = append(cmds, resolveCommitTitleCmd(m.client, e.ID, e.ProjectID, e.PushData.CommitTo, e.PushData.CommitTitle))
+	}
+	return tea.Batch(cmds...)
 }
 
 // itemLineCount returns the number of rendered lines for a display item.

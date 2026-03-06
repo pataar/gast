@@ -53,9 +53,10 @@ func authorStyleFor(username string) lipgloss.Style {
 
 // Shared styles.
 var (
+	bracketStyle   = lipgloss.NewStyle().Faint(true)
 	projectStyle   = lipgloss.NewStyle().Faint(true)
 	timestampStyle = lipgloss.NewStyle().Faint(true)
-	titleStyle     = lipgloss.NewStyle().Faint(true)
+	titleStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
 )
 
 // Action styles — subtle colors matching the target type palette approach.
@@ -81,8 +82,8 @@ var (
 	snippetStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))   // cyan
 )
 
-// Detail line style — dimmed and indented for the second line of an event.
-var detailStyle = lipgloss.NewStyle().Faint(true).Italic(true)
+// Detail line style — lighter gray for the second line of an event.
+var detailStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250")).Italic(true)
 
 // mentionStyle highlights @username mentions of the current user.
 var mentionStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3")) // yellow bold
@@ -109,21 +110,10 @@ func FormatEvent(e Event, width int) string {
 	action := formatAction(e)
 	ts := timestampStyle.Render(formatTimestamp(e.CreatedAt))
 	project := projectStyle.Render(projectName(e.ProjectName))
-	right := project + " " + ts
+	right := bracketStyle.Render("[") + project + " " + ts + bracketStyle.Render("]")
 
 	left := fmt.Sprintf(" %s %s", author, action)
-	if width > 0 {
-		leftWidth := lipgloss.Width(left)
-		rightWidth := lipgloss.Width(right)
-		gap := width - leftWidth - rightWidth - 1
-		if gap < 1 {
-			gap = 1
-		}
-		left += strings.Repeat(" ", gap) + right
-	} else {
-		left += " " + right
-	}
-	line := left
+	line := alignLeftRight(left, right, width)
 
 	// Show a detail line for comments (snippet) and for events with a title
 	// (issues, MRs, work items) to keep the first line clean.
@@ -220,12 +210,36 @@ func formatTimestamp(t time.Time) string {
 	}
 }
 
-// truncate shortens a string to maxLen characters, appending "..." if needed.
+// alignLeftRight places left and right content on a single line, padding with
+// spaces to right-align the right portion. When left is too wide it is
+// truncated (ANSI-aware) to make room for at least the right portion + a gap.
+func alignLeftRight(left, right string, width int) string {
+	if width <= 0 {
+		return left + " " + right
+	}
+	rightWidth := lipgloss.Width(right)
+	maxLeft := width - rightWidth - 2 // 2 = minimum gap
+	leftWidth := lipgloss.Width(left)
+	if leftWidth > maxLeft && maxLeft > 3 {
+		left = lipgloss.NewStyle().MaxWidth(maxLeft).Render(left)
+		leftWidth = lipgloss.Width(left)
+	}
+	gap := width - leftWidth - rightWidth - 1
+	if gap < 1 {
+		gap = 1
+	}
+	return left + strings.Repeat(" ", gap) + right
+}
+
+// truncate shortens a string to maxLen visible characters, appending "..."
+// if needed. Uses rune count rather than byte length so multi-byte UTF-8
+// characters are measured correctly.
 func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
-	return s[:maxLen-3] + "..."
+	return string(runes[:maxLen-3]) + "..."
 }
 
 // shortenUsername truncates long bot usernames by stripping the hash suffix.
@@ -301,21 +315,10 @@ func FormatGroupedPush(e Event, refs []string, width int) string {
 	action := formatPushMultiRef(e, refs)
 	ts := timestampStyle.Render(formatTimestamp(e.CreatedAt))
 	project := projectStyle.Render(projectName(e.ProjectName))
-	right := project + " " + ts
+	right := bracketStyle.Render("[") + project + " " + ts + bracketStyle.Render("]")
 
 	left := fmt.Sprintf(" %s %s", author, action)
-	if width > 0 {
-		leftWidth := lipgloss.Width(left)
-		rightWidth := lipgloss.Width(right)
-		gap := width - leftWidth - rightWidth - 1
-		if gap < 1 {
-			gap = 1
-		}
-		left += strings.Repeat(" ", gap) + right
-	} else {
-		left += " " + right
-	}
-	line := left
+	line := alignLeftRight(left, right, width)
 
 	detailMax := 80
 	if width > 4 {
@@ -352,9 +355,9 @@ func targetLabel(e Event) string {
 	}
 
 	// Show title inline only for types that don't get a detail line.
+	// No fixed truncation here — alignLeftRight handles overflow.
 	if e.TargetTitle != "" && !HasDetailTarget(e.TargetType) {
-		title := truncate(e.TargetTitle, 50)
-		parts = append(parts, titleStyle.Render(fmt.Sprintf("%q", title)))
+		parts = append(parts, titleStyle.Render(fmt.Sprintf("%q", e.TargetTitle)))
 	}
 
 	return strings.Join(parts, " ")
