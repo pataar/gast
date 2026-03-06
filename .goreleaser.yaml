@@ -23,7 +23,7 @@ brews:
   - repository:
       owner: pataar
       name: homebrew-tap
-    folder: Formula
+    directory: Formula
     homepage: https://github.com/pataar/gast
     description: GitLab Activity Stream TUI
 
