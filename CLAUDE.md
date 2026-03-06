@@ -26,7 +26,7 @@ internal/
   browser/open.go                # Cross-platform browser opening, URL construction
   config/config.go               # Config struct, Load() from XDG path, env overrides
   demo/events.go                 # Fake event data for --demo mode
-  gitlab/client.go               # Raw HTTP client for GET /events?scope=all, project cache
+  gitlab/client.go               # GitLab API client (events, projects, user), project cache
   notify/notify.go               # Cross-platform desktop notifications (macOS/Linux)
   event/
     types.go                     # Domain types: Event, PushData
@@ -42,7 +42,7 @@ internal/
 ## Dependencies
 
 - **TUI**: `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, `charm.land/bubbles/v2`
-- **GitLab API**: `gitlab.com/gitlab-org/api/client-go` (for project resolution only; events use raw HTTP for `scope=all` support)
+- **GitLab API**: `gitlab.com/gitlab-org/api/client-go`
 - **CLI/config**: `github.com/spf13/cobra`, `github.com/spf13/viper`
 
 ## Charm v2 API Conventions
