@@ -21,6 +21,9 @@ var cfgFile string
 // demoMode enables demo mode with fake data (no GitLab connection needed).
 var demoMode bool
 
+// projectFilters and groupFilters limit displayed events to matching projects/groups.
+var projectFilters, groupFilters []string
+
 // rootCmd is the top-level cobra command that launches the TUI.
 var rootCmd = &cobra.Command{
 	Use:   "gast",
@@ -35,6 +38,8 @@ func init() {
 	rootCmd.Flags().String("token", "", "GitLab personal access token")
 	rootCmd.Flags().Duration("interval", 0, "poll interval (e.g. 30s)")
 	rootCmd.Flags().Bool("full-project-path", false, "show full project path instead of short name")
+	rootCmd.Flags().StringSliceVar(&projectFilters, "project", nil, "filter to projects matching these names (comma-separated)")
+	rootCmd.Flags().StringSliceVar(&groupFilters, "group", nil, "filter to groups matching these prefixes (comma-separated)")
 	rootCmd.Flags().BoolVar(&demoMode, "demo", false, "run with fake data (no GitLab connection)")
 
 	viper.BindPFlag("gitlab_host", rootCmd.Flags().Lookup("host"))
@@ -64,6 +69,7 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	model := tui.NewModel(client, cfg)
+	model.SetFilters(projectFilters, groupFilters)
 	return runTUI(model)
 }
 

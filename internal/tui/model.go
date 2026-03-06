@@ -44,6 +44,8 @@ type Model struct {
 	demo             bool
 	demoEvents       []event.Event
 	consecutiveErrs  int
+	projectFilters   []string // filter events to these project path substrings
+	groupFilters     []string // filter events to these group path prefixes
 }
 
 // NewModel creates a new TUI model wired to the given GitLab client and config.
@@ -343,6 +345,32 @@ func (m Model) fetchCmd() tea.Cmd {
 	return fetchEventsCmd(m.client, after, m.cfg.PageSize)
 }
 
+// SetFilters configures project and group filters. Events whose ProjectName
+// doesn't match any filter will be excluded.
+func (m *Model) SetFilters(projects, groups []string) {
+	m.projectFilters = projects
+	m.groupFilters = groups
+}
+
+// matchesFilter returns true if the event matches the configured project/group
+// filters, or if no filters are set.
+func (m Model) matchesFilter(e event.Event) bool {
+	if len(m.projectFilters) == 0 && len(m.groupFilters) == 0 {
+		return true
+	}
+	for _, p := range m.projectFilters {
+		if strings.Contains(e.ProjectName, p) {
+			return true
+		}
+	}
+	for _, g := range m.groupFilters {
+		if strings.HasPrefix(e.ProjectName, g+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // mergeEvents deduplicates and appends new events to the model's event list,
 // maintaining ascending chronological order (oldest first, newest last).
 // The API returns events newest-first, so we iterate in reverse to append
@@ -351,6 +379,9 @@ func (m *Model) mergeEvents(newEvents []event.Event) {
 	for i := len(newEvents) - 1; i >= 0; i-- {
 		e := newEvents[i]
 		if _, seen := m.seenIDs[e.ID]; seen {
+			continue
+		}
+		if !m.matchesFilter(e) {
 			continue
 		}
 		m.seenIDs[e.ID] = struct{}{}
