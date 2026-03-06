@@ -73,8 +73,9 @@ internal/
 
 ## GitLab API
 
-- Uses `GET /events?scope=all` (raw HTTP) to mirror `/dashboard/activity?filter=projects`
-- Project names resolved via `GET /projects/:id` with in-memory cache
+- Uses `gitlab.com/gitlab-org/api/client-go` library for all API calls
+- Events fetched via `ListCurrentUserContributionEvents` with `Scope: "all"`
+- Project names resolved via `GetProject` with in-memory cache
 - Token requires `read_api` scope (or `api`)
 
 ## Releasing

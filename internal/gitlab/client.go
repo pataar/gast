@@ -3,12 +3,7 @@
 package gitlab
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,9 +16,7 @@ import (
 // to path-with-namespace mappings to reduce API calls.
 type Client struct {
 	api          *gl.Client
-	host         string
-	token        string
-	projectCache map[int]string
+	projectCache map[int64]string
 	mu           sync.RWMutex
 }
 
@@ -36,49 +29,8 @@ func NewClient(host, token string) (*Client, error) {
 	}
 	return &Client{
 		api:          api,
-		host:         strings.TrimRight(host, "/"),
-		token:        token,
-		projectCache: make(map[int]string),
+		projectCache: make(map[int64]string),
 	}, nil
-}
-
-// doGet performs an authenticated GET request to the given URL, returning the
-// response. The caller is responsible for closing the response body.
-func (c *Client) doGet(reqURL string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("building request: %w", err)
-	}
-	req.Header.Set("PRIVATE-TOKEN", c.token)
-	return http.DefaultClient.Do(req)
-}
-
-// rawEvent mirrors the JSON shape returned by GET /events. We decode manually
-// because we need to pass the undocumented scope=all parameter which the
-// go-gitlab library doesn't support.
-type rawEvent struct {
-	ID             int    `json:"id"`
-	ActionName     string `json:"action_name"`
-	AuthorUsername string `json:"author_username"`
-	CreatedAt      string `json:"created_at"`
-	ProjectID      int    `json:"project_id"`
-	TargetType     string `json:"target_type"`
-	TargetTitle    string `json:"target_title"`
-	TargetIID      int    `json:"target_iid"`
-	PushData *struct {
-		Action      string `json:"action"`
-		CommitCount int    `json:"commit_count"`
-		CommitFrom  string `json:"commit_from"`
-		CommitTitle string `json:"commit_title"`
-		CommitTo    string `json:"commit_to"`
-		Ref         string `json:"ref"`
-		RefType     string `json:"ref_type"`
-	} `json:"push_data"`
-	Note *struct {
-		Body         string `json:"body"`
-		NoteableType string `json:"noteable_type"`
-		NoteableIID  int    `json:"noteable_iid"`
-	} `json:"note"`
 }
 
 // FetchEvents retrieves activity events across all projects the authenticated
@@ -86,58 +38,47 @@ type rawEvent struct {
 // When after is non-nil, only events created after that time are returned.
 // Results are sorted in descending order and limited to pageSize entries.
 func (c *Client) FetchEvents(after *time.Time, pageSize int) ([]event.Event, error) {
-	params := url.Values{
-		"sort":     {"desc"},
-		"per_page": {strconv.Itoa(pageSize)},
-		"page":     {"1"},
-		"scope":    {"all"}, // include all project members' activity, not just our own
+	opts := &gl.ListContributionEventsOptions{
+		ListOptions: gl.ListOptions{Page: 1, PerPage: int64(pageSize)},
+		Sort:        gl.Ptr("desc"),
+		Scope:       gl.Ptr("all"),
 	}
 	if after != nil {
-		params.Set("after", after.Format("2006-01-02"))
+		t := gl.ISOTime(*after)
+		opts.After = &t
 	}
 
-	reqURL := c.host + "/api/v4/events?" + params.Encode()
-	resp, err := c.doGet(reqURL)
+	raw, _, err := c.api.Events.ListCurrentUserContributionEvents(opts)
 	if err != nil {
 		return nil, fmt.Errorf("fetching events: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API returned HTTP %d: %s", resp.StatusCode, string(body))
-	}
-
-	var rawEvents []rawEvent
-	if err := json.NewDecoder(resp.Body).Decode(&rawEvents); err != nil {
-		return nil, fmt.Errorf("decoding events: %w", err)
-	}
-
-	events := make([]event.Event, 0, len(rawEvents))
-	for _, re := range rawEvents {
-		// Skip push events that are merge commits or have no actual commits
-		// (e.g. tag pushes, empty pushes after filtering).
-		if re.PushData != nil && (isMergeCommit(re.PushData.CommitTitle) || re.PushData.CommitCount == 0) {
+	events := make([]event.Event, 0, len(raw))
+	for _, re := range raw {
+		// Skip push events that are merge commits or have no actual commits.
+		if re.PushData.CommitCount > 0 && isMergeCommit(re.PushData.CommitTitle) {
+			continue
+		}
+		if re.PushData.CommitCount == 0 && re.PushData.Ref != "" {
 			continue
 		}
 
 		e := event.Event{
-			ID:             re.ID,
+			ID:             int(re.ID),
 			ActionName:     re.ActionName,
 			AuthorUsername: re.AuthorUsername,
-			TargetIID:      re.TargetIID,
+			TargetIID:      int(re.TargetIID),
 			TargetTitle:    re.TargetTitle,
 			TargetType:     re.TargetType,
 		}
 
-		// Parse the ISO 8601 timestamp from the API response.
-		if t, err := time.Parse(time.RFC3339, re.CreatedAt); err == nil {
-			e.CreatedAt = t
+		if re.CreatedAt != nil {
+			e.CreatedAt = *re.CreatedAt
 		}
 
-		if re.PushData != nil {
+		if re.PushData.CommitCount > 0 {
 			e.PushData = &event.PushData{
-				CommitCount: re.PushData.CommitCount,
+				CommitCount: int(re.PushData.CommitCount),
 				CommitTitle: re.PushData.CommitTitle,
 				CommitTo:    re.PushData.CommitTo,
 				Ref:         re.PushData.Ref,
@@ -150,7 +91,7 @@ func (c *Client) FetchEvents(after *time.Time, pageSize int) ([]event.Event, err
 				e.NoteBody = re.Note.Body
 			}
 			e.NoteableType = re.Note.NoteableType
-			e.NoteableIID = re.Note.NoteableIID
+			e.NoteableIID = int(re.Note.NoteableIID)
 		}
 
 		e.ProjectName = c.resolveProject(re.ProjectID)
@@ -169,29 +110,17 @@ func isMergeCommit(commitTitle string) bool {
 // CurrentUsername returns the username of the authenticated user by calling
 // GET /api/v4/user.
 func (c *Client) CurrentUsername() (string, error) {
-	resp, err := c.doGet(c.host + "/api/v4/user")
+	user, _, err := c.api.Users.CurrentUser()
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API returned HTTP %d", resp.StatusCode)
-	}
-
-	var body struct {
-		Username string `json:"username"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return "", err
-	}
-	return body.Username, nil
+	return user.Username, nil
 }
 
 // resolveProject looks up a project's path-with-namespace by its ID, using
 // the in-memory cache to avoid redundant API calls. Falls back to
 // "project/<id>" if the API call fails.
-func (c *Client) resolveProject(id int) string {
+func (c *Client) resolveProject(id int64) string {
 	c.mu.RLock()
 	name, ok := c.projectCache[id]
 	c.mu.RUnlock()
