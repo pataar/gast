@@ -1,5 +1,10 @@
 # gast
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/pataar/gast)](https://goreportcard.com/report/github.com/pataar/gast)
+[![Go Reference](https://pkg.go.dev/badge/github.com/pataar/gast.svg)](https://pkg.go.dev/github.com/pataar/gast)
+[![Release](https://img.shields.io/github/v/release/pataar/gast)](https://github.com/pataar/gast/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **G**itLab **A**ctivity **S**tream **T**UI — a terminal dashboard that mirrors your GitLab activity feed with live polling.
 
 ![gast screenshot](assets/screenshot.png)
