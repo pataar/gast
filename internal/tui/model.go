@@ -158,6 +158,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fetching = true
 			m.manualRefresh = true
 			return m, tea.Batch(m.spinner.Tick, m.fetchCmd())
+		case key.Matches(msg, m.keys.ToggleTime):
+			event.RelativeTime = !event.RelativeTime
+			if m.initialized {
+				m.viewport.SetContent(m.renderEvents())
+			}
+			return m, nil
 		case key.Matches(msg, m.keys.GoTop):
 			m.viewport.GotoTop()
 			return m, nil
@@ -238,7 +244,7 @@ func (m Model) renderDivider() string {
 }
 
 func (m Model) renderFooter() string {
-	left := " q quit  j/k scroll  r refresh  ? help"
+	left := " q quit  j/k scroll  r refresh  t time  ? help"
 
 	eventCount := fmt.Sprintf("%d events", len(m.events))
 	if m.err != nil {
@@ -299,6 +305,7 @@ func (m Model) renderHelp() string {
 		{"g / Home", "Go to top"},
 		{"G / End", "Go to bottom"},
 		{"r", "Force refresh"},
+		{"t", "Toggle relative/absolute time"},
 		{"?", "Toggle this help"},
 		{"q / Ctrl+C", "Quit"},
 	}

@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"regexp"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 )
@@ -94,6 +95,10 @@ var CurrentUser string
 // path-with-namespace or just the last segment.
 var ShowFullProject bool
 
+// RelativeTime controls whether timestamps are shown as relative ("3m ago")
+// or absolute ("15:04"). Toggled at runtime with the 't' key.
+var RelativeTime bool
+
 // FormatEvent renders a single event as one or two lines. The first line shows
 // timestamp, author, action, and right-aligned project name. A second detail
 // line shows the title for issues/MRs/work items, or a comment snippet for
@@ -102,7 +107,7 @@ func FormatEvent(e Event, width int) string {
 	shortName := shortenUsername(e.AuthorUsername)
 	author := authorStyleFor(shortName).Render(shortName)
 	action := formatAction(e)
-	ts := timestampStyle.Render(e.CreatedAt.Local().Format("15:04"))
+	ts := timestampStyle.Render(formatTimestamp(e.CreatedAt))
 	project := projectStyle.Render(projectName(e.ProjectName))
 	right := project + " " + ts
 
@@ -193,6 +198,28 @@ func firstLine(s string) string {
 	return s
 }
 
+// formatTimestamp returns either a relative or absolute timestamp string
+// for the given time, depending on the RelativeTime setting.
+func formatTimestamp(t time.Time) string {
+	if !RelativeTime {
+		return t.Local().Format("15:04")
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "now"
+	case d < time.Hour:
+		m := int(d.Minutes())
+		return fmt.Sprintf("%dm ago", m)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		return fmt.Sprintf("%dh ago", h)
+	default:
+		days := int(d.Hours() / 24)
+		return fmt.Sprintf("%dd ago", days)
+	}
+}
+
 // truncate shortens a string to maxLen characters, appending "..." if needed.
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
@@ -272,7 +299,7 @@ func FormatGroupedPush(e Event, refs []string, width int) string {
 	shortName := shortenUsername(e.AuthorUsername)
 	author := authorStyleFor(shortName).Render(shortName)
 	action := formatPushMultiRef(e, refs)
-	ts := timestampStyle.Render(e.CreatedAt.Local().Format("15:04"))
+	ts := timestampStyle.Render(formatTimestamp(e.CreatedAt))
 	project := projectStyle.Render(projectName(e.ProjectName))
 	right := project + " " + ts
 

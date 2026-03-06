@@ -5,13 +5,14 @@ import "charm.land/bubbles/v2/key"
 // KeyMap defines all key bindings used by the TUI. Fields are ordered
 // alphabetically for consistency.
 type KeyMap struct {
-	Down      key.Binding
-	GoBottom  key.Binding
-	GoTop     key.Binding
-	Help      key.Binding
-	Quit      key.Binding
-	Refresh   key.Binding
-	Up        key.Binding
+	Down       key.Binding
+	GoBottom   key.Binding
+	GoTop      key.Binding
+	Help       key.Binding
+	Quit       key.Binding
+	Refresh    key.Binding
+	ToggleTime key.Binding
+	Up         key.Binding
 }
 
 // defaultKeyMap returns the default set of key bindings for navigation,
@@ -42,6 +43,10 @@ func defaultKeyMap() KeyMap {
 			key.WithKeys("r"),
 			key.WithHelp("r", "refresh"),
 		),
+		ToggleTime: key.NewBinding(
+			key.WithKeys("t"),
+			key.WithHelp("t", "toggle relative time"),
+		),
 		Up: key.NewBinding(
 			key.WithKeys("k", "up"),
 			key.WithHelp("k/up", "scroll up"),
@@ -59,6 +64,6 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.GoTop, k.GoBottom},
-		{k.Refresh, k.Help, k.Quit},
+		{k.Refresh, k.ToggleTime, k.Help, k.Quit},
 	}
 }
