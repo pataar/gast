@@ -9,6 +9,7 @@ type KeyMap struct {
 	GoBottom   key.Binding
 	GoTop      key.Binding
 	Help       key.Binding
+	Open       key.Binding
 	Quit       key.Binding
 	Refresh    key.Binding
 	ToggleTime key.Binding
@@ -34,6 +35,10 @@ func defaultKeyMap() KeyMap {
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "toggle help"),
+		),
+		Open: key.NewBinding(
+			key.WithKeys("o", "enter"),
+			key.WithHelp("o/enter", "open in browser"),
 		),
 		Quit: key.NewBinding(
 			key.WithKeys("q", "ctrl+c"),
@@ -64,6 +69,6 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.GoTop, k.GoBottom},
-		{k.Refresh, k.ToggleTime, k.Help, k.Quit},
+		{k.Open, k.Refresh, k.ToggleTime, k.Help, k.Quit},
 	}
 }

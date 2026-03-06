@@ -12,6 +12,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/pataar/gast/internal/browser"
 	"github.com/pataar/gast/internal/config"
 	"github.com/pataar/gast/internal/event"
 	"github.com/pataar/gast/internal/gitlab"
@@ -169,6 +170,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Help):
 			m.showHelp = true
 			m.viewport.SetContent(m.renderHelp())
+			return m, nil
+		case key.Matches(msg, m.keys.Open):
+			if m.selectedIdx >= 0 && m.selectedIdx < len(m.displayItems) {
+				e := m.displayItems[m.selectedIdx].primaryEvent
+				host := ""
+				if m.cfg != nil {
+					host = m.cfg.GitLabHost
+				}
+				if host != "" {
+					_ = browser.OpenEvent(host, e)
+				}
+			}
 			return m, nil
 		case key.Matches(msg, m.keys.Refresh):
 			m.fetching = true
