@@ -1,0 +1,36 @@
+version: 2
+
+builds:
+  - binary: gast
+    main: .
+    ldflags:
+      - -s -w
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+brews:
+  - repository:
+      owner: pataar
+      name: homebrew-tap
+    folder: Formula
+    homepage: https://github.com/pataar/gast
+    description: GitLab Activity Stream TUI
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

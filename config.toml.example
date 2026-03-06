@@ -1,0 +1,4 @@
+gitlab_host = "https://gitlab.example.com"
+token = "glpat-xxxxxxxxxxxxxxxxxxxx"
+poll_interval = "30s"
+page_size = 50
