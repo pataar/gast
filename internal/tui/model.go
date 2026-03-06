@@ -133,14 +133,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.consecutiveErrs = 0
 		m.checkMentions(msg.Events)
 		m.mergeEvents(msg.Events)
+		oldItemCount := len(m.displayItems)
 		m.buildDisplayItems()
-		// Select the newest item (last) on new events.
-		if len(m.displayItems) > 0 {
-			m.selectedIdx = len(m.displayItems) - 1
-		}
 		if m.initialized {
+			// Only auto-scroll to bottom if user was already at the end
+			// or this is the first fetch.
+			wasAtEnd := m.selectedIdx >= oldItemCount-1 || oldItemCount == 0
+			if wasAtEnd && len(m.displayItems) > 0 {
+				m.selectedIdx = len(m.displayItems) - 1
+			}
 			m.viewport.SetContent(m.renderEvents())
-			m.viewport.GotoBottom()
+			if wasAtEnd {
+				m.viewport.GotoBottom()
+			}
+		} else if len(m.displayItems) > 0 {
+			m.selectedIdx = len(m.displayItems) - 1
 		}
 		// Schedule the next poll after a successful fetch (skip in demo mode).
 		if !m.demo {
@@ -177,12 +184,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Open):
 			if m.selectedIdx >= 0 && m.selectedIdx < len(m.displayItems) {
 				e := m.displayItems[m.selectedIdx].primaryEvent
-				host := ""
-				if m.cfg != nil {
-					host = m.cfg.GitLabHost
-				}
-				if host != "" {
+				if host := m.gitlabHost(); host != "" {
 					_ = browser.OpenEvent(host, e)
+				}
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.OpenProject):
+			if m.selectedIdx >= 0 && m.selectedIdx < len(m.displayItems) {
+				e := m.displayItems[m.selectedIdx].primaryEvent
+				if host := m.gitlabHost(); host != "" && e.ProjectName != "" {
+					_ = browser.Open(fmt.Sprintf("%s/%s", strings.TrimRight(host, "/"), e.ProjectName))
 				}
 			}
 			return m, nil
@@ -308,7 +319,7 @@ func (m Model) renderDivider() string {
 }
 
 func (m Model) renderFooter() string {
-	left := " j/k select  o open  r refresh  t time  ? help  q quit"
+	left := " j/k select  o open  p project  r refresh  t time  ? help  q quit"
 
 	eventCount := fmt.Sprintf("%d events", len(m.events))
 	if m.err != nil {
@@ -374,6 +385,7 @@ func (m Model) renderHelp() string {
 		{"g / Home", "Select first event"},
 		{"G / End", "Select last event"},
 		{"o / Enter", "Open event in browser"},
+		{"p", "Open project in browser"},
 		{"r", "Force refresh"},
 		{"t", "Toggle relative/absolute time"},
 		{"?", "Toggle this help"},
@@ -424,6 +436,14 @@ func (m Model) itemLineCount(idx int) int {
 		lines = 2
 	}
 	return lines
+}
+
+// gitlabHost returns the configured GitLab host URL, or empty string.
+func (m Model) gitlabHost() string {
+	if m.cfg != nil {
+		return m.cfg.GitLabHost
+	}
+	return ""
 }
 
 // backoffInterval returns the retry interval with exponential backoff based on

@@ -68,12 +68,16 @@ type rawEvent struct {
 	PushData *struct {
 		Action      string `json:"action"`
 		CommitCount int    `json:"commit_count"`
+		CommitFrom  string `json:"commit_from"`
 		CommitTitle string `json:"commit_title"`
+		CommitTo    string `json:"commit_to"`
 		Ref         string `json:"ref"`
 		RefType     string `json:"ref_type"`
 	} `json:"push_data"`
 	Note *struct {
-		Body string `json:"body"`
+		Body         string `json:"body"`
+		NoteableType string `json:"noteable_type"`
+		NoteableIID  int    `json:"noteable_iid"`
 	} `json:"note"`
 }
 
@@ -135,13 +139,18 @@ func (c *Client) FetchEvents(after *time.Time, pageSize int) ([]event.Event, err
 			e.PushData = &event.PushData{
 				CommitCount: re.PushData.CommitCount,
 				CommitTitle: re.PushData.CommitTitle,
+				CommitTo:    re.PushData.CommitTo,
 				Ref:         re.PushData.Ref,
 				RefType:     re.PushData.RefType,
 			}
 		}
 
-		if re.Note != nil && re.Note.Body != "" {
-			e.NoteBody = re.Note.Body
+		if re.Note != nil {
+			if re.Note.Body != "" {
+				e.NoteBody = re.Note.Body
+			}
+			e.NoteableType = re.Note.NoteableType
+			e.NoteableIID = re.Note.NoteableIID
 		}
 
 		e.ProjectName = c.resolveProject(re.ProjectID)

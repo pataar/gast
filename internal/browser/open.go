@@ -29,6 +29,9 @@ func EventURL(host string, e event.Event) string {
 
 	switch {
 	case e.PushData != nil:
+		if e.PushData.CommitTo != "" {
+			return fmt.Sprintf("%s/%s/-/commit/%s", host, project, e.PushData.CommitTo)
+		}
 		return fmt.Sprintf("%s/%s/-/tree/%s", host, project, e.PushData.Ref)
 	case strings.EqualFold(e.TargetType, "MergeRequest") && e.TargetIID > 0:
 		return fmt.Sprintf("%s/%s/-/merge_requests/%d", host, project, e.TargetIID)
@@ -36,9 +39,28 @@ func EventURL(host string, e event.Event) string {
 		return fmt.Sprintf("%s/%s/-/issues/%d", host, project, e.TargetIID)
 	case strings.EqualFold(e.TargetType, "WorkItem") && e.TargetIID > 0:
 		return fmt.Sprintf("%s/%s/-/issues/%d", host, project, e.TargetIID)
-	case (strings.EqualFold(e.TargetType, "Note") || strings.EqualFold(e.TargetType, "DiscussionNote")) && e.TargetIID > 0:
-		// Notes on MRs have TargetIID set to the MR IID via the comment action
-		return fmt.Sprintf("%s/%s/-/merge_requests/%d", host, project, e.TargetIID)
+	case strings.EqualFold(e.TargetType, "Note") || strings.EqualFold(e.TargetType, "DiscussionNote"):
+		return noteURL(host, project, e)
+	default:
+		return fmt.Sprintf("%s/%s", host, project)
+	}
+}
+
+// noteURL constructs the URL for a comment event using the note's parent type.
+func noteURL(host, project string, e event.Event) string {
+	iid := e.NoteableIID
+	if iid == 0 {
+		iid = e.TargetIID
+	}
+	nt := strings.ToLower(e.NoteableType)
+	switch {
+	case (nt == "issue" || nt == "workitem") && iid > 0:
+		return fmt.Sprintf("%s/%s/-/issues/%d", host, project, iid)
+	case nt == "mergerequest" && iid > 0:
+		return fmt.Sprintf("%s/%s/-/merge_requests/%d", host, project, iid)
+	case iid > 0:
+		// Fallback when NoteableType is empty (older API responses).
+		return fmt.Sprintf("%s/%s/-/merge_requests/%d", host, project, iid)
 	default:
 		return fmt.Sprintf("%s/%s", host, project)
 	}

@@ -335,7 +335,7 @@ func targetLabel(e Event) string {
 	var parts []string
 
 	switch strings.ToLower(e.TargetType) {
-	case "issue":
+	case "issue", "workitem":
 		parts = append(parts, issueStyle.Render(fmt.Sprintf("issue #%d", e.TargetIID)))
 	case "mergerequest":
 		parts = append(parts, mrStyle.Render(fmt.Sprintf("MR !%d", e.TargetIID)))
