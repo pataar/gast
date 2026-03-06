@@ -34,13 +34,16 @@ type Model struct {
 	width    int
 	height   int
 
-	fetching    bool
-	lastUpdate  time.Time
-	err         error
-	showHelp    bool
-	initialized bool
-	demo        bool
-	demoEvents  []event.Event
+	fetching         bool
+	initialFetch     bool // true until the first successful fetch completes
+	manualRefresh    bool // true when user pressed 'r'
+	lastUpdate       time.Time
+	err              error
+	showHelp         bool
+	initialized      bool
+	demo             bool
+	demoEvents       []event.Event
+	consecutiveErrs  int
 }
 
 // NewModel creates a new TUI model wired to the given GitLab client and config.
@@ -51,11 +54,12 @@ func NewModel(client *gitlab.Client, cfg *config.Config) Model {
 	event.CurrentUser = cfg.Username
 
 	return Model{
-		client:  client,
-		cfg:     cfg,
-		seenIDs: make(map[int]struct{}),
-		spinner: s,
-		keys:    defaultKeyMap(),
+		client:       client,
+		cfg:          cfg,
+		seenIDs:      make(map[int]struct{}),
+		spinner:      s,
+		keys:         defaultKeyMap(),
+		initialFetch: true,
 	}
 }
 
@@ -107,8 +111,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case EventsFetchedMsg:
 		m.fetching = false
+		m.initialFetch = false
+		m.manualRefresh = false
 		m.lastUpdate = time.Now()
 		m.err = nil
+		m.consecutiveErrs = 0
 		m.mergeEvents(msg.Events)
 		if m.initialized {
 			m.viewport.SetContent(m.renderEvents())
@@ -122,8 +129,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case FetchErrorMsg:
 		m.fetching = false
 		m.err = msg.Err
-		// Retry after the normal interval even on error.
-		cmds = append(cmds, tickCmd(m.cfg.PollInterval))
+		m.consecutiveErrs++
+		cmds = append(cmds, tickCmd(m.backoffInterval()))
 
 	case TickMsg:
 		m.fetching = true
@@ -148,6 +155,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.keys.Refresh):
 			m.fetching = true
+			m.manualRefresh = true
 			return m, tea.Batch(m.spinner.Tick, m.fetchCmd())
 		case key.Matches(msg, m.keys.GoTop):
 			m.viewport.GotoTop()
@@ -158,9 +166,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case spinner.TickMsg:
-		// Only animate the spinner while a fetch is in progress to avoid
+		// Only animate the spinner during initial/manual fetch to avoid
 		// unnecessary re-renders (which cause visible flashing).
-		if m.fetching {
+		if m.fetching && (m.initialFetch || m.manualRefresh) {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			cmds = append(cmds, cmd)
@@ -208,7 +216,7 @@ func (m Model) renderHeader() string {
 	title := headerStyle.Render("GitLab Activity Stream")
 
 	right := ""
-	if m.fetching {
+	if m.fetching && (m.initialFetch || m.manualRefresh) {
 		right = m.spinner.View() + " Fetching..."
 	} else if !m.lastUpdate.IsZero() {
 		right = fmt.Sprintf("Last updated: %s    ↻ %s",
@@ -301,6 +309,19 @@ func (m Model) renderHelp() string {
 	}
 
 	return b.String()
+}
+
+// backoffInterval returns the retry interval with exponential backoff based on
+// consecutive error count. Caps at 5 minutes.
+func (m Model) backoffInterval() time.Duration {
+	base := m.cfg.PollInterval
+	for i := 0; i < m.consecutiveErrs-1; i++ {
+		base *= 2
+		if base > 5*time.Minute {
+			return 5 * time.Minute
+		}
+	}
+	return base
 }
 
 // fetchCmd builds the fetch command using the latest event's timestamp as the
