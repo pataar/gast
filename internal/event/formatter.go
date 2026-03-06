@@ -291,7 +291,7 @@ func PushGroupKey(e Event) string {
 	if e.PushData == nil || e.PushData.CommitTitle == "" {
 		return ""
 	}
-	return e.AuthorUsername + "\x00" + e.PushData.CommitTitle
+	return e.AuthorUsername + "\x00" + e.ProjectName + "\x00" + e.PushData.CommitTitle
 }
 
 // FormatGroupedPush renders a push event with multiple branch refs on one line.
