@@ -90,6 +90,10 @@ var mentionStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3")
 // @mentions of this user are highlighted in note bodies.
 var CurrentUser string
 
+// ShowFullProject controls whether project names display the full
+// path-with-namespace or just the last segment.
+var ShowFullProject bool
+
 // FormatEvent renders a single event as one or two lines. The first line shows
 // timestamp, author, action, and right-aligned project name. A second detail
 // line shows the title for issues/MRs/work items, or a comment snippet for
@@ -165,9 +169,13 @@ func highlightMentions(raw string) string {
 	return strings.Join(result, "")
 }
 
-// projectName extracts just the project name (last segment) from a full
-// path-with-namespace like "org/subgroup/project" → "project".
+// projectName returns the display name for a project. When ShowFullProject is
+// true, returns the full path-with-namespace; otherwise extracts the last
+// segment (e.g. "org/subgroup/project" → "project").
 func projectName(name string) string {
+	if ShowFullProject {
+		return name
+	}
 	if i := strings.LastIndex(name, "/"); i >= 0 {
 		return name[i+1:]
 	}

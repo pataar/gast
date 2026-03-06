@@ -34,11 +34,13 @@ func init() {
 	rootCmd.Flags().String("host", "", "GitLab host URL")
 	rootCmd.Flags().String("token", "", "GitLab personal access token")
 	rootCmd.Flags().Duration("interval", 0, "poll interval (e.g. 30s)")
+	rootCmd.Flags().Bool("full-project-path", false, "show full project path instead of short name")
 	rootCmd.Flags().BoolVar(&demoMode, "demo", false, "run with fake data (no GitLab connection)")
 
 	viper.BindPFlag("gitlab_host", rootCmd.Flags().Lookup("host"))
 	viper.BindPFlag("token", rootCmd.Flags().Lookup("token"))
 	viper.BindPFlag("poll_interval", rootCmd.Flags().Lookup("interval"))
+	viper.BindPFlag("show_full_project_path", rootCmd.Flags().Lookup("full-project-path"))
 }
 
 // run loads configuration, initializes the GitLab client, and starts the Bubble Tea program.

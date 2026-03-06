@@ -14,11 +14,13 @@ import (
 // Config holds the runtime configuration for connecting to GitLab and
 // controlling polling behavior.
 type Config struct {
-	GitLabHost   string        `mapstructure:"gitlab_host"`
-	Token        string        `mapstructure:"token"`
-	PollInterval time.Duration `mapstructure:"poll_interval"`
-	PageSize     int           `mapstructure:"page_size"`
-	Username     string        // Resolved at startup from the API; not persisted.
+	GitLabHost      string        `mapstructure:"gitlab_host"`
+	Token           string        `mapstructure:"token"`
+	PollInterval    time.Duration `mapstructure:"poll_interval"`
+	PageSize        int           `mapstructure:"page_size"`
+	ShowFullProject bool          `mapstructure:"show_full_project_path"`
+	Notifications   bool          `mapstructure:"notifications"`
+	Username        string        // Resolved at startup from the API; not persisted.
 }
 
 // Dir returns the default configuration directory path for gast.
@@ -51,6 +53,8 @@ func Load(cfgFile string) (*Config, error) {
 
 	viper.SetDefault("poll_interval", "30s")
 	viper.SetDefault("page_size", 50)
+	viper.SetDefault("show_full_project_path", false)
+	viper.SetDefault("notifications", false)
 
 	viper.SetEnvPrefix("GITLAB_ACTIVITY")
 	viper.BindEnv("gitlab_host", "GITLAB_ACTIVITY_HOST")
@@ -69,6 +73,8 @@ func Load(cfgFile string) (*Config, error) {
 	cfg.GitLabHost = viper.GetString("gitlab_host")
 	cfg.Token = viper.GetString("token")
 	cfg.PageSize = viper.GetInt("page_size")
+	cfg.ShowFullProject = viper.GetBool("show_full_project_path")
+	cfg.Notifications = viper.GetBool("notifications")
 
 	interval := viper.GetString("poll_interval")
 	dur, err := time.ParseDuration(interval)

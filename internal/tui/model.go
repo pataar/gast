@@ -50,8 +50,9 @@ type Model struct {
 func NewModel(client *gitlab.Client, cfg *config.Config) Model {
 	s := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(spinnerStyle))
 
-	// Set the current username so @mentions can be highlighted in note bodies.
+	// Set display preferences from config.
 	event.CurrentUser = cfg.Username
+	event.ShowFullProject = cfg.ShowFullProject
 
 	return Model{
 		client:       client,
