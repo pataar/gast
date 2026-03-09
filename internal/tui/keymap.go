@@ -5,6 +5,7 @@ import "charm.land/bubbles/v2/key"
 // KeyMap defines all key bindings used by the TUI. Fields are ordered
 // alphabetically for consistency.
 type KeyMap struct {
+	Clear       key.Binding
 	Down        key.Binding
 	GoBottom    key.Binding
 	GoTop       key.Binding
@@ -21,6 +22,10 @@ type KeyMap struct {
 // refreshing, help, and quitting.
 func defaultKeyMap() KeyMap {
 	return KeyMap{
+		Clear: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "clear events"),
+		),
 		Down: key.NewBinding(
 			key.WithKeys("j", "down"),
 			key.WithHelp("j/down", "scroll down"),

@@ -53,8 +53,9 @@ type Model struct {
 	demo            bool
 	demoEvents      []event.Event
 	consecutiveErrs int
-	projectFilters  []string // filter events to these project path substrings
-	groupFilters    []string // filter events to these group path prefixes
+	clearedAt       *time.Time // if set, ignore events before this time
+	projectFilters  []string   // filter events to these project path substrings
+	groupFilters    []string   // filter events to these group path prefixes
 	displayItems    []displayItem
 	selectedIdx     int
 	mentionCount    int // unread @mention count
@@ -216,6 +217,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fetching = true
 			m.manualRefresh = true
 			return m, tea.Batch(m.spinner.Tick, m.fetchCmd())
+		case key.Matches(msg, m.keys.Clear):
+			now := time.Now()
+			m.clearedAt = &now
+			m.events = m.events[:0]
+			m.seenIDs = make(map[int]struct{})
+			m.displayItems = m.displayItems[:0]
+			m.selectedIdx = 0
+			m.mentionCount = 0
+			if m.initialized {
+				m.viewport.SetContent(m.renderEvents())
+				m.viewport.GotoTop()
+			}
+			return m, nil
 		case key.Matches(msg, m.keys.ToggleTime):
 			event.RelativeTime = !event.RelativeTime
 			if m.initialized {
@@ -332,7 +346,7 @@ func (m Model) renderDivider() string {
 }
 
 func (m Model) renderFooter() string {
-	left := " j/k select  o open  p project  r refresh  t time  ? help  q quit"
+	left := " j/k select  o open  p project  r refresh  c clear  t time  ? help  q quit"
 
 	eventCount := fmt.Sprintf("%d events", len(m.events))
 	if m.err != nil {
@@ -400,6 +414,7 @@ func (m Model) renderHelp() string {
 		{"o / Enter", "Open event in browser"},
 		{"p", "Open project in browser"},
 		{"r", "Force refresh"},
+		{"c", "Clear events"},
 		{"t", "Toggle relative/absolute time"},
 		{"?", "Toggle this help"},
 		{"q / Ctrl+C", "Quit"},
@@ -501,6 +516,11 @@ func (m Model) fetchCmd() tea.Cmd {
 		// Duplicates are filtered out by seenIDs in mergeEvents.
 		t := m.events[len(m.events)-1].CreatedAt.Add(-24 * time.Hour)
 		after = &t
+	} else if m.clearedAt != nil {
+		// After a clear, use the clear timestamp so we don't re-fetch
+		// old events.
+		t := m.clearedAt.Add(-24 * time.Hour)
+		after = &t
 	}
 	return fetchEventsCmd(m.client, after, m.cfg.PageSize)
 }
@@ -595,6 +615,9 @@ func (m *Model) mergeEvents(newEvents []event.Event) {
 	for i := len(newEvents) - 1; i >= 0; i-- {
 		e := newEvents[i]
 		if _, seen := m.seenIDs[e.ID]; seen {
+			continue
+		}
+		if m.clearedAt != nil && e.CreatedAt.Before(*m.clearedAt) {
 			continue
 		}
 		if !m.matchesFilter(e) {
