@@ -30,13 +30,14 @@ func sendDarwin(title, body, url string) error {
 			"-title", title,
 			"-message", body,
 			"-timeout", "0", // persistent until dismissed
+			"-sound", "default",
 		}
 		if url != "" {
 			args = append(args, "-open", url)
 		}
 		return exec.Command(tn, args...).Start()
 	}
-	script := fmt.Sprintf(`display notification %q with title %q`, body, title)
+	script := fmt.Sprintf(`display notification %q with title %q sound name "default"`, body, title)
 	return exec.Command("osascript", "-e", script).Start()
 }
 
