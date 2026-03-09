@@ -2,6 +2,7 @@ package tui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/pataar/gast/internal/event"
 )
@@ -148,4 +149,42 @@ func TestMergeEvents_CleansUpSeenIDs(t *testing.T) {
 	if len(m.seenIDs) != len(m.events) {
 		t.Errorf("seenIDs length = %d, events length = %d; they should match", len(m.seenIDs), len(m.events))
 	}
+}
+
+// TestShouldSuppressNotifications verifies that notifications are suppressed
+// during the initial fetch and the first fetch after clearing events.
+func TestShouldSuppressNotifications(t *testing.T) {
+	t.Run("initial fetch", func(t *testing.T) {
+		m := &Model{seenIDs: make(map[int]struct{}), initialFetch: true}
+		if !m.shouldSuppressNotifications() {
+			t.Error("expected suppression during initial fetch")
+		}
+	})
+
+	t.Run("first fetch after clear", func(t *testing.T) {
+		now := time.Now()
+		m := &Model{seenIDs: make(map[int]struct{}), clearedAt: &now}
+		if !m.shouldSuppressNotifications() {
+			t.Error("expected suppression on first fetch after clear")
+		}
+	})
+
+	t.Run("subsequent fetch after clear", func(t *testing.T) {
+		now := time.Now()
+		m := &Model{
+			seenIDs:   make(map[int]struct{}),
+			clearedAt: &now,
+			events:    []event.Event{{ID: 1}},
+		}
+		if m.shouldSuppressNotifications() {
+			t.Error("should not suppress when events already present after clear")
+		}
+	})
+
+	t.Run("normal fetch", func(t *testing.T) {
+		m := &Model{seenIDs: make(map[int]struct{})}
+		if m.shouldSuppressNotifications() {
+			t.Error("should not suppress during normal fetch")
+		}
+	})
 }

@@ -126,13 +126,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(m.renderEvents())
 
 	case EventsFetchedMsg:
+		suppressNotify := m.shouldSuppressNotifications()
 		m.fetching = false
 		m.initialFetch = false
 		m.manualRefresh = false
 		m.lastUpdate = time.Now()
 		m.err = nil
 		m.consecutiveErrs = 0
-		m.checkMentions(msg.Events)
+		if !suppressNotify {
+			m.checkMentions(msg.Events)
+		}
 		m.mergeEvents(msg.Events)
 		oldItemCount := len(m.displayItems)
 		m.buildDisplayItems()
@@ -526,6 +529,12 @@ func (m Model) fetchCmd() tea.Cmd {
 		after = &t
 	}
 	return fetchEventsCmd(m.client, after, m.cfg.PageSize)
+}
+
+// shouldSuppressNotifications returns true when notifications should be skipped:
+// during the initial fetch or the first fetch after clearing events.
+func (m Model) shouldSuppressNotifications() bool {
+	return m.initialFetch || (m.clearedAt != nil && len(m.events) == 0)
 }
 
 // checkMentions scans new events for @mentions of the current user. When found,
