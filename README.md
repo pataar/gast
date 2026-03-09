@@ -136,6 +136,20 @@ Projects match by substring, groups match by path prefix.
 
 Mouse wheel scrolling is also supported.
 
+## Troubleshooting
+
+### Notifications not showing (macOS)
+
+If you have `notifications = true` in your config but don't see desktop alerts:
+
+1. **Check notification permissions** — Go to **System Settings > Notifications > terminal-notifier** and make sure the alert style is set to **Banners** or **Alerts** (not "None").
+2. **Check Focus mode** — A Focus mode (Do Not Disturb, Work, etc.) may be suppressing notifications.
+3. **Verify terminal-notifier is installed** — Run `terminal-notifier -title test -message hello` in your terminal. If the command is not found, install it with `brew install terminal-notifier`.
+
+### Notifications not showing (Linux)
+
+Make sure `notify-send` is available (usually part of the `libnotify` package).
+
 ## License
 
 [MIT](LICENSE)
