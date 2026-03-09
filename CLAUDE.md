@@ -25,12 +25,14 @@ cmd/
 internal/
   browser/open.go                # Cross-platform browser opening, URL construction
   config/config.go               # Config struct, Load() from XDG path, env overrides
+    config_test.go               # Tests for config loading and env overrides
   demo/events.go                 # Fake event data for --demo mode
   gitlab/client.go               # GitLab API client (events, projects, user), project cache
   notify/notify.go               # Cross-platform desktop notifications (macOS/Linux)
   event/
     types.go                     # Domain types: Event, PushData
     formatter.go                 # Lipgloss-styled per-action-type rendering
+    formatter_test.go            # Tests for event formatting
   tui/
     model.go                     # Bubbletea Model (Init/Update/View), polling lifecycle
     model_test.go                # Tests for TUI model
