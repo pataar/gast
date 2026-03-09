@@ -33,9 +33,10 @@ internal/
     formatter.go                 # Lipgloss-styled per-action-type rendering
   tui/
     model.go                     # Bubbletea Model (Init/Update/View), polling lifecycle
+    model_test.go                # Tests for TUI model
     messages.go                  # EventsFetchedMsg, FetchErrorMsg, TickMsg
     commands.go                  # fetchEventsCmd, tickCmd
-    keymap.go                    # Key bindings (j/k, o, p, r, t, ?, g/G, q)
+    keymap.go                    # Key bindings (j/k, o, p, r, t, c, ?, g/G, q)
     styles.go                    # Lipgloss style definitions
 ```
 
