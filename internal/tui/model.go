@@ -363,6 +363,9 @@ func (m Model) renderFooter() string {
 
 func (m Model) renderEvents() string {
 	if len(m.displayItems) == 0 {
+		if m.clearedAt != nil {
+			return "\n  No events yet. Waiting for new events..."
+		}
 		return "\n  No events yet. Waiting for first fetch..."
 	}
 
