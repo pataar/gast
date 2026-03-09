@@ -14,7 +14,7 @@
 - Live-updating feed of all GitLab project activity (pushes, merges, comments, issues, approvals)
 - Color-coded events with per-author coloring
 - Open events or projects directly in the browser
-- @mention notifications (in-app badge + optional desktop alerts)
+- @mention notifications (in-app badge + optional desktop alerts with sound and click-to-open)
 - Filter by project or group
 - Mouse and keyboard navigation
 
@@ -118,6 +118,7 @@ Projects match by substring, groups match by path prefix.
 | `g` / `G` | Select first / last event |
 | `o` / `Enter` | Open selected event in browser |
 | `p` | Open project page in browser |
+| `c` | Clear events |
 | `r` | Force refresh |
 | `t` | Toggle relative / absolute timestamps |
 | `?` | Toggle help |
