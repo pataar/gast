@@ -525,7 +525,11 @@ func (m *Model) checkMentions(newEvents []event.Event) {
 		m.mentionCount++
 		if m.cfg != nil && m.cfg.Notifications {
 			body := notify.FormatMention(e.AuthorUsername, e.ProjectName, e.NoteBody)
-			_ = notify.Send("gast — @mention", body)
+			url := ""
+			if host := m.gitlabHost(); host != "" {
+				url = browser.EventURL(host, e)
+			}
+			_ = notify.Send("gast — @mention", body, url)
 		}
 	}
 }
