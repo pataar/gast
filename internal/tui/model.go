@@ -496,7 +496,10 @@ func (m Model) backoffInterval() time.Duration {
 func (m Model) fetchCmd() tea.Cmd {
 	var after *time.Time
 	if len(m.events) > 0 {
-		t := m.events[len(m.events)-1].CreatedAt
+		// GitLab's "after" param is date-only (YYYY-MM-DD) and exclusive,
+		// so subtract a day to ensure same-day events are still returned.
+		// Duplicates are filtered out by seenIDs in mergeEvents.
+		t := m.events[len(m.events)-1].CreatedAt.Add(-24 * time.Hour)
 		after = &t
 	}
 	return fetchEventsCmd(m.client, after, m.cfg.PageSize)
