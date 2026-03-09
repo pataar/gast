@@ -6,11 +6,17 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
+)
+
+var (
+	darwinWarned bool
+	darwinMu     sync.Mutex
 )
 
 // Send sends a desktop notification with the given title and body.
-// If url is non-empty, clicking the notification opens that URL (requires
-// terminal-notifier on macOS).
+// On macOS, requires terminal-notifier (brew install terminal-notifier).
+// If url is non-empty, clicking the notification opens that URL.
 func Send(title, body, url string) error {
 	switch runtime.GOOS {
 	case "darwin":
@@ -22,23 +28,39 @@ func Send(title, body, url string) error {
 	}
 }
 
-// sendDarwin uses terminal-notifier when available (supports click-to-open and
-// persistent display), otherwise falls back to osascript.
-func sendDarwin(title, body, url string) error {
-	if tn, err := exec.LookPath("terminal-notifier"); err == nil {
-		args := []string{
-			"-title", title,
-			"-message", body,
-			"-timeout", "0", // persistent until dismissed
-			"-sound", "default",
-		}
-		if url != "" {
-			args = append(args, "-open", url)
-		}
-		return exec.Command(tn, args...).Start()
+// CheckDarwinDeps returns true if terminal-notifier is available on macOS.
+// On other platforms it always returns true.
+func CheckDarwinDeps() bool {
+	if runtime.GOOS != "darwin" {
+		return true
 	}
-	script := fmt.Sprintf(`display notification %q with title %q sound name "default"`, body, title)
-	return exec.Command("osascript", "-e", script).Start()
+	_, err := exec.LookPath("terminal-notifier")
+	return err == nil
+}
+
+// sendDarwin uses terminal-notifier for notifications. If terminal-notifier
+// is not installed, it prints a one-time warning and skips the notification.
+func sendDarwin(title, body, url string) error {
+	tn, err := exec.LookPath("terminal-notifier")
+	if err != nil {
+		darwinMu.Lock()
+		defer darwinMu.Unlock()
+		if !darwinWarned {
+			darwinWarned = true
+			fmt.Println("Warning: terminal-notifier not found — notifications disabled. Install with: brew install terminal-notifier")
+		}
+		return nil
+	}
+	args := []string{
+		"-title", title,
+		"-message", body,
+		"-timeout", "0",
+		"-sound", "default",
+	}
+	if url != "" {
+		args = append(args, "-open", url)
+	}
+	return exec.Command(tn, args...).Start()
 }
 
 // sendLinux uses notify-send with critical urgency so the notification persists.

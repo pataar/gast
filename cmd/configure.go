@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"net/url"
 	"os"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/pataar/gast/internal/config"
+	"github.com/pataar/gast/internal/notify"
 	"github.com/spf13/cobra"
 )
 
@@ -125,6 +127,21 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 		notificationsDefault = existing.notifications
 	}
 	notifications := promptYesNo(scanner, "Enable desktop notifications for @mentions?", notificationsDefault)
+
+	if notifications && !notify.CheckDarwinDeps() {
+		fmt.Println(styleWarning.Render("  terminal-notifier is required for macOS notifications."))
+		if promptYesNo(scanner, "  Install it now with Homebrew?", true) {
+			fmt.Print("  Installing terminal-notifier... ")
+			if err := installTerminalNotifier(); err != nil {
+				fmt.Println(styleError.Render("FAILED: " + err.Error()))
+				fmt.Println(styleWarning.Render("  You can install it manually: brew install terminal-notifier"))
+			} else {
+				fmt.Println(styleSuccess.Render("OK"))
+			}
+		} else {
+			fmt.Println(styleWarning.Render("  Notifications won't work until you run: brew install terminal-notifier"))
+		}
+	}
 
 	// Step 7: Validate the token by calling the GitLab API.
 	fmt.Print("\nValidating token against " + styleDim.Render(host) + " ... ")
@@ -288,6 +305,22 @@ func prompt(scanner *bufio.Scanner, label, defaultVal string) string {
 		return defaultVal
 	}
 	return text
+}
+
+// --------------------------------------------------------------------------
+// Dependency installation
+// --------------------------------------------------------------------------
+
+// installTerminalNotifier runs `brew install terminal-notifier`.
+func installTerminalNotifier() error {
+	brew, err := exec.LookPath("brew")
+	if err != nil {
+		return fmt.Errorf("Homebrew not found")
+	}
+	cmd := exec.Command(brew, "install", "terminal-notifier")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // --------------------------------------------------------------------------
