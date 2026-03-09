@@ -18,6 +18,16 @@
 - Filter by project or group
 - Mouse and keyboard navigation
 
+### Desktop notifications (macOS)
+
+Notifications require [terminal-notifier](https://github.com/julienXX/terminal-notifier):
+
+```bash
+brew install terminal-notifier
+```
+
+The `gast configure` wizard will offer to install it automatically when you enable notifications.
+
 ## Install
 
 ### Homebrew
