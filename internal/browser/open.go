@@ -39,7 +39,7 @@ func EventURL(host string, e event.Event) string {
 		return fmt.Sprintf("%s/%s/-/issues/%d", host, project, e.TargetIID)
 	case strings.EqualFold(e.TargetType, "WorkItem") && e.TargetIID > 0:
 		return fmt.Sprintf("%s/%s/-/issues/%d", host, project, e.TargetIID)
-	case strings.EqualFold(e.TargetType, "Note") || strings.EqualFold(e.TargetType, "DiscussionNote"):
+	case event.IsNoteTargetType(e.TargetType):
 		return noteURL(host, project, e)
 	default:
 		return fmt.Sprintf("%s/%s", host, project)
@@ -47,20 +47,26 @@ func EventURL(host string, e event.Event) string {
 }
 
 // noteURL constructs the URL for a comment event using the note's parent type.
+// When a NoteID is available, it appends a #note_<id> anchor so the browser
+// scrolls directly to the comment (works for both regular and diff notes).
 func noteURL(host, project string, e event.Event) string {
 	iid := e.NoteableIID
 	if iid == 0 {
 		iid = e.TargetIID
 	}
+	var anchor string
+	if e.NoteID > 0 {
+		anchor = fmt.Sprintf("#note_%d", e.NoteID)
+	}
 	nt := strings.ToLower(e.NoteableType)
 	switch {
 	case (nt == "issue" || nt == "workitem") && iid > 0:
-		return fmt.Sprintf("%s/%s/-/issues/%d", host, project, iid)
+		return fmt.Sprintf("%s/%s/-/issues/%d%s", host, project, iid, anchor)
 	case nt == "mergerequest" && iid > 0:
-		return fmt.Sprintf("%s/%s/-/merge_requests/%d", host, project, iid)
+		return fmt.Sprintf("%s/%s/-/merge_requests/%d%s", host, project, iid, anchor)
 	case iid > 0:
 		// Fallback when NoteableType is empty (older API responses).
-		return fmt.Sprintf("%s/%s/-/merge_requests/%d", host, project, iid)
+		return fmt.Sprintf("%s/%s/-/merge_requests/%d%s", host, project, iid, anchor)
 	default:
 		return fmt.Sprintf("%s/%s", host, project)
 	}

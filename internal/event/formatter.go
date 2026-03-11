@@ -337,16 +337,16 @@ func FormatGroupedPush(e Event, refs []string, width int) string {
 func targetLabel(e Event) string {
 	var parts []string
 
-	switch strings.ToLower(e.TargetType) {
-	case "issue", "workitem":
+	switch targetType := strings.ToLower(e.TargetType); {
+	case targetType == "issue" || targetType == "workitem":
 		parts = append(parts, issueStyle.Render(fmt.Sprintf("issue #%d", e.TargetIID)))
-	case "mergerequest":
+	case targetType == "mergerequest":
 		parts = append(parts, mrStyle.Render(fmt.Sprintf("MR !%d", e.TargetIID)))
-	case "milestone":
+	case targetType == "milestone":
 		parts = append(parts, milestoneStyle.Render("milestone"))
-	case "note", "discussionnote":
+	case IsNoteTargetType(e.TargetType):
 		parts = append(parts, noteStyle.Render("note"))
-	case "snippet":
+	case targetType == "snippet":
 		parts = append(parts, snippetStyle.Render("snippet"))
 	default:
 		if e.TargetType != "" {

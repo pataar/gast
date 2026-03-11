@@ -96,6 +96,7 @@ func (c *Client) FetchEvents(after *time.Time, pageSize int) ([]event.Event, err
 			if re.Note.Body != "" {
 				e.NoteBody = re.Note.Body
 			}
+			e.NoteID = int(re.Note.ID)
 			e.NoteableType = re.Note.NoteableType
 			e.NoteableIID = int(re.Note.NoteableIID)
 		}
