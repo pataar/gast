@@ -2,10 +2,10 @@ package tui
 
 import "charm.land/bubbles/v2/key"
 
-// KeyMap defines all key bindings used by the TUI. Fields are ordered
-// alphabetically for consistency.
+// KeyMap defines all key bindings used by the TUI. Fields are ordered alphabetically for consistency.
 type KeyMap struct {
 	Clear       key.Binding
+	Close       key.Binding
 	Down        key.Binding
 	GoBottom    key.Binding
 	GoTop       key.Binding
@@ -18,67 +18,64 @@ type KeyMap struct {
 	Up          key.Binding
 }
 
-// defaultKeyMap returns the default set of key bindings for navigation,
-// refreshing, help, and quitting.
+// defaultKeyMap returns the default set of key bindings for navigation, refreshing, help, and quitting.
 func defaultKeyMap() KeyMap {
 	return KeyMap{
 		Clear: key.NewBinding(
 			key.WithKeys("c"),
-			key.WithHelp("c", "clear events"),
+			key.WithHelp("c", "Clear events"),
+		),
+		Close: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "Close help"),
 		),
 		Down: key.NewBinding(
 			key.WithKeys("j", "down"),
-			key.WithHelp("j/down", "scroll down"),
+			key.WithHelp("j / down", "Select next event"),
 		),
 		GoBottom: key.NewBinding(
 			key.WithKeys("G", "end"),
-			key.WithHelp("G", "go to bottom"),
+			key.WithHelp("G / End", "Select last event"),
 		),
 		GoTop: key.NewBinding(
 			key.WithKeys("g", "home"),
-			key.WithHelp("g", "go to top"),
+			key.WithHelp("g / Home", "Select first event"),
 		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
-			key.WithHelp("?", "toggle help"),
+			key.WithHelp("?", "Toggle this help"),
 		),
 		Open: key.NewBinding(
 			key.WithKeys("o", "enter"),
-			key.WithHelp("o/enter", "open in browser"),
+			key.WithHelp("o / Enter", "Open event in browser"),
 		),
 		OpenProject: key.NewBinding(
 			key.WithKeys("p"),
-			key.WithHelp("p", "open project in browser"),
+			key.WithHelp("p", "Open project in browser"),
 		),
 		Quit: key.NewBinding(
 			key.WithKeys("q", "ctrl+c"),
-			key.WithHelp("q", "quit"),
+			key.WithHelp("q / Ctrl+C", "Quit"),
 		),
 		Refresh: key.NewBinding(
 			key.WithKeys("r"),
-			key.WithHelp("r", "refresh"),
+			key.WithHelp("r", "Force refresh"),
 		),
 		ToggleTime: key.NewBinding(
 			key.WithKeys("t"),
-			key.WithHelp("t", "toggle relative time"),
+			key.WithHelp("t", "Toggle relative/absolute time"),
 		),
 		Up: key.NewBinding(
 			key.WithKeys("k", "up"),
-			key.WithHelp("k/up", "scroll up"),
+			key.WithHelp("k / up", "Select previous event"),
 		),
 	}
 }
 
-// ShortHelp returns a compact set of key bindings for the help bubble.
-func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Quit, k.Up, k.Down, k.Refresh, k.Help}
-}
-
-// FullHelp returns the complete set of key bindings grouped by category for
-// the expanded help view.
+// FullHelp returns all key bindings grouped by category, in the order shown in the help overlay.
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.GoTop, k.GoBottom},
-		{k.Open, k.OpenProject, k.Refresh, k.ToggleTime, k.Help, k.Quit},
+		{k.Down, k.Up, k.GoTop, k.GoBottom},
+		{k.Open, k.OpenProject, k.Refresh, k.Clear, k.ToggleTime, k.Help, k.Quit},
 	}
 }

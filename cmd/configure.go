@@ -2,24 +2,26 @@ package cmd
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"os/exec"
 	"net/url"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/pataar/gast/internal/config"
+	"github.com/pataar/gast/internal/gitlab"
 	"github.com/pataar/gast/internal/notify"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
-// configureCmd represents the configure subcommand that launches an interactive
-// configuration wizard for setting up GitLab connection details and preferences.
+/*
+configureCmd represents the configure subcommand that launches an interactive
+configuration wizard for setting up GitLab connection details and preferences.
+*/
 var configureCmd = &cobra.Command{
 	Use:   "configure",
 	Short: "Interactive configuration wizard for gast",
@@ -34,9 +36,7 @@ func init() {
 	rootCmd.AddCommand(configureCmd)
 }
 
-// --------------------------------------------------------------------------
-// Styles – kept minimal; just enough colour to guide the user.
-// --------------------------------------------------------------------------
+// ── Styles – kept minimal; just enough colour to guide the user.
 
 var (
 	styleHeading = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF8C00"))
@@ -47,13 +47,13 @@ var (
 	styleDim     = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
 )
 
-// --------------------------------------------------------------------------
-// Configuration wizard entry-point
-// --------------------------------------------------------------------------
+// ── Configuration wizard entry-point
 
-// runConfigure is the main handler for the `gast configure` command.
-// It walks the user through each config field, validates the token against the
-// GitLab API, and writes the final config to disk.
+/*
+runConfigure is the main handler for the `gast configure` command.
+It walks the user through each config field, validates the token against the
+GitLab API, and writes the final config to disk.
+*/
 func runConfigure(cmd *cobra.Command, args []string) error {
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -72,61 +72,39 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		fmt.Println()
+	} else {
+		existing = &config.Config{}
+	}
+	if existing.PollInterval <= 0 {
+		existing.PollInterval = 30 * time.Second
+	}
+	if existing.PageSize <= 0 {
+		existing.PageSize = 50
 	}
 
-	// Step 1: GitLab host URL
-	hostDefault := ""
-	if existing != nil {
-		hostDefault = existing.host
-	}
-	host, err := promptHost(scanner, hostDefault)
+	host, err := promptHost(scanner, existing.GitLabHost)
 	if err != nil {
 		return err
 	}
 
-	// Step 2: Personal access token
-	tokenDefault := ""
-	if existing != nil {
-		tokenDefault = existing.token
-	}
-	token, err := promptToken(scanner, tokenDefault)
+	token, err := promptToken(scanner, existing.Token)
 	if err != nil {
 		return err
 	}
 
-	// Step 3: Poll interval
-	intervalDefault := "30s"
-	if existing != nil && existing.pollInterval != "" {
-		intervalDefault = existing.pollInterval
-	}
-	interval, err := promptInterval(scanner, intervalDefault)
+	interval, err := promptInterval(scanner, existing.PollInterval.String())
 	if err != nil {
 		return err
 	}
 
-	// Step 4: Page size
-	pageSizeDefault := 50
-	if existing != nil && existing.pageSize > 0 {
-		pageSizeDefault = existing.pageSize
-	}
-	pageSize, err := promptPageSize(scanner, pageSizeDefault)
+	pageSize, err := promptPageSize(scanner, existing.PageSize)
 	if err != nil {
 		return err
 	}
 
-	// Step 5: Show full project path
-	showFullProjectDefault := false
-	if existing != nil {
-		showFullProjectDefault = existing.showFullProject
-	}
-	showFullProject := promptYesNo(scanner, "Show full project path (e.g. org/group/project)?", showFullProjectDefault)
+	showFullProject := promptYesNo(scanner, "Show full project path (e.g. org/group/project)?", existing.ShowFullProject)
 
-	// Step 6: Desktop notifications
-	notificationsDefault := false
-	if existing != nil {
-		notificationsDefault = existing.notifications
-	}
-	notifications := promptYesNo(scanner, "Enable desktop notifications for @mentions?", notificationsDefault)
+	notifications := promptYesNo(scanner, "Enable desktop notifications for @mentions?", existing.Notifications)
 
 	if notifications && !notify.CheckDarwinDeps() {
 		fmt.Println(styleWarning.Render("  terminal-notifier is required for macOS notifications."))
@@ -143,7 +121,7 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Step 7: Validate the token by calling the GitLab API.
+	// Validate the token by calling the GitLab API.
 	fmt.Print("\nValidating token against " + styleDim.Render(host) + " ... ")
 	username, err := validateToken(host, token)
 	if err != nil {
@@ -152,7 +130,7 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println(styleSuccess.Render("OK") + " (authenticated as " + stylePrompt.Render(username) + ")")
 
-	// Step 8: Write the configuration file.
+	// Write the configuration file.
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
@@ -166,12 +144,9 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// --------------------------------------------------------------------------
-// Prompt helpers
-// --------------------------------------------------------------------------
+// ── Prompt helpers
 
-// promptHost asks the user for a GitLab host URL and validates that it
-// includes a scheme (http or https).
+// promptHost asks the user for a GitLab host URL and validates that it includes an http(s) scheme.
 func promptHost(scanner *bufio.Scanner, defaultVal string) (string, error) {
 	for {
 		input := prompt(scanner, "GitLab host URL", defaultVal)
@@ -195,20 +170,20 @@ func promptHost(scanner *bufio.Scanner, defaultVal string) (string, error) {
 	}
 }
 
-// promptToken asks the user for a personal access token. It validates the
-// conventional glpat- / glpat_ prefix and warns if the prefix is missing.
+/*
+promptToken asks the user for a personal access token. An existing token is shown masked in the
+label (never as the prompt default, so it can't echo back). It warns when the conventional
+glpat- / glpat_ prefix is missing.
+*/
 func promptToken(scanner *bufio.Scanner, defaultVal string) (string, error) {
-	displayDefault := defaultVal
-	if displayDefault != "" {
-		// Mask the token in the prompt so it is not leaked on screen.
-		displayDefault = displayDefault[:6] + strings.Repeat("*", len(displayDefault)-6)
+	label := "Personal access token"
+	if defaultVal != "" {
+		label += " [" + defaultVal[:6] + strings.Repeat("*", len(defaultVal)-6) + "]"
 	}
 
 	for {
-		input := prompt(scanner, "Personal access token", displayDefault)
-
-		// If the user pressed Enter without typing, reuse the stored default.
-		if input == displayDefault && defaultVal != "" {
+		input := prompt(scanner, label, "")
+		if input == "" {
 			input = defaultVal
 		}
 
@@ -225,14 +200,10 @@ func promptToken(scanner *bufio.Scanner, defaultVal string) (string, error) {
 	}
 }
 
-// promptInterval asks the user for a poll interval string and validates it
-// as a Go duration with a minimum of 5 seconds.
+// promptInterval asks for a poll interval and validates it as a Go duration of at least 5 seconds.
 func promptInterval(scanner *bufio.Scanner, defaultVal string) (string, error) {
 	for {
 		input := prompt(scanner, "Poll interval", defaultVal)
-		if input == "" {
-			input = defaultVal
-		}
 
 		dur, err := time.ParseDuration(input)
 		if err != nil {
@@ -248,14 +219,10 @@ func promptInterval(scanner *bufio.Scanner, defaultVal string) (string, error) {
 	}
 }
 
-// promptPageSize asks the user for the number of events to fetch per poll
-// and validates the value is between 1 and 100.
+// promptPageSize asks for the number of events to fetch per poll, between 1 and 100.
 func promptPageSize(scanner *bufio.Scanner, defaultVal int) (int, error) {
 	for {
 		input := prompt(scanner, "Page size (1-100)", strconv.Itoa(defaultVal))
-		if input == "" {
-			return defaultVal, nil
-		}
 
 		n, err := strconv.Atoi(input)
 		if err != nil || n < 1 || n > 100 {
@@ -274,8 +241,8 @@ func promptYesNo(scanner *bufio.Scanner, question string, defaultYes bool) bool 
 		hint = "y/N"
 	}
 
-	input := prompt(scanner, question+" ["+hint+"]", "")
-	input = strings.ToLower(strings.TrimSpace(input))
+	// The hint doubles as the prompt default; on empty input it falls through to defaultYes below.
+	input := strings.ToLower(prompt(scanner, question, hint))
 
 	switch input {
 	case "y", "yes":
@@ -287,8 +254,10 @@ func promptYesNo(scanner *bufio.Scanner, question string, defaultYes bool) bool 
 	}
 }
 
-// prompt prints a styled prompt line and reads one line of input from the
-// scanner. If the user enters nothing, the default value is returned.
+/*
+prompt prints a styled prompt line (with the default value in [brackets] when present) and reads
+one line of input from the scanner. If the user enters nothing, the default value is returned.
+*/
 func prompt(scanner *bufio.Scanner, label, defaultVal string) string {
 	suffix := ": "
 	if defaultVal != "" {
@@ -307,9 +276,7 @@ func prompt(scanner *bufio.Scanner, label, defaultVal string) string {
 	return text
 }
 
-// --------------------------------------------------------------------------
-// Dependency installation
-// --------------------------------------------------------------------------
+// ── Dependency installation
 
 // installTerminalNotifier runs `brew install terminal-notifier`.
 func installTerminalNotifier() error {
@@ -323,99 +290,33 @@ func installTerminalNotifier() error {
 	return cmd.Run()
 }
 
-// --------------------------------------------------------------------------
-// Token validation via the GitLab REST API
-// --------------------------------------------------------------------------
+// ── Token validation via the GitLab REST API
 
-// validateToken performs a GET request to /api/v4/user using the provided host
-// and token. It returns the authenticated username on success.
+// validateToken checks the token by requesting the authenticated user and returns their username.
 func validateToken(host, token string) (string, error) {
-	reqURL := host + "/api/v4/user"
-
-	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	client, err := gitlab.NewClient(host, token)
 	if err != nil {
-		return "", fmt.Errorf("building request: %w", err)
+		return "", err
 	}
-	req.Header.Set("PRIVATE-TOKEN", token)
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API returned HTTP %d", resp.StatusCode)
-	}
-
-	// We only need the username from the response.
-	var body struct {
-		Username string `json:"username"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return "", fmt.Errorf("decoding response: %w", err)
-	}
-	if body.Username == "" {
-		return "", fmt.Errorf("response did not contain a username")
-	}
-
-	return body.Username, nil
+	return client.CurrentUsername()
 }
 
-// --------------------------------------------------------------------------
-// Config file I/O
-// --------------------------------------------------------------------------
+// ── Config file I/O
 
-// existingConfig holds values parsed from a previously saved configuration
-// file, used to pre-populate defaults in the wizard.
-type existingConfig struct {
-	host            string
-	notifications   bool
-	pageSize        int
-	pollInterval    string
-	showFullProject bool
-	token           string
-}
-
-// loadExistingConfig attempts to read an existing config.toml and extract the
-// known keys. Returns nil if the file does not exist or cannot be parsed.
-func loadExistingConfig(path string) *existingConfig {
-	data, err := os.ReadFile(path)
-	if err != nil {
+/*
+loadExistingConfig reads an existing config file into a Config used to pre-populate wizard
+defaults. Returns nil if the file does not exist or cannot be parsed.
+*/
+func loadExistingConfig(path string) *config.Config {
+	v := viper.New()
+	v.SetConfigFile(path)
+	if err := v.ReadInConfig(); err != nil {
 		return nil
 	}
-
-	cfg := &existingConfig{}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		val = strings.Trim(val, "\"")
-
-		switch key {
-		case "gitlab_host":
-			cfg.host = val
-		case "notifications":
-			cfg.notifications = val == "true"
-		case "page_size":
-			cfg.pageSize, _ = strconv.Atoi(val)
-		case "poll_interval":
-			cfg.pollInterval = val
-		case "show_full_project_path":
-			cfg.showFullProject = val == "true"
-		case "token":
-			cfg.token = val
-		}
+	cfg := &config.Config{}
+	if err := v.Unmarshal(cfg); err != nil {
+		return nil
 	}
-
 	return cfg
 }
 

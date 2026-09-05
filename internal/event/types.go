@@ -7,18 +7,24 @@ import (
 	"time"
 )
 
-// PushData holds details about a git push event, including the number of
-// commits and the branch or tag reference.
+// PushData holds details about a git push event, including the number of commits and the branch or tag reference.
 type PushData struct {
 	CommitCount int
 	CommitTo    string // SHA of the head commit
-	RefType     string
 	Ref         string
 	CommitTitle string
 }
 
-// IsNoteTargetType returns true when the target type represents a comment
-// (Note, DiscussionNote, or DiffNote).
+// IsIssueTargetType returns true when the target type represents an issue (Issue, or the newer WorkItem).
+func IsIssueTargetType(targetType string) bool {
+	switch strings.ToLower(targetType) {
+	case "issue", "workitem":
+		return true
+	}
+	return false
+}
+
+// IsNoteTargetType returns true when the target type represents a comment (Note, DiscussionNote, or DiffNote).
 func IsNoteTargetType(targetType string) bool {
 	switch strings.ToLower(targetType) {
 	case "note", "discussionnote", "diffnote":

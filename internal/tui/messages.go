@@ -14,8 +14,9 @@ type FetchErrorMsg struct {
 
 // CommitTitleMsg is sent when a full commit title has been resolved.
 type CommitTitleMsg struct {
-	EventID int    // ID of the event to update
-	Title   string // full commit title
+	ProjectID int64  // project the commit belongs to
+	SHA       string // commit SHA; identifies the events to update
+	Title     string // full commit title
 }
 
 // TickMsg signals that it is time to start the next polling cycle.

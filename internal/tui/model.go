@@ -11,7 +11,6 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/pataar/gast/internal/browser"
 	"github.com/pataar/gast/internal/config"
 	"github.com/pataar/gast/internal/event"
@@ -91,8 +90,10 @@ func NewDemoModel(cfg *config.Config, events []event.Event) Model {
 // schedules the first polling tick.
 func (m Model) Init() tea.Cmd {
 	if m.demo {
+		// Capture only the events so the command doesn't keep the whole model alive.
+		events := m.demoEvents
 		return func() tea.Msg {
-			return EventsFetchedMsg{Events: m.demoEvents}
+			return EventsFetchedMsg{Events: events}
 		}
 	}
 	return tea.Batch(
@@ -123,7 +124,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetWidth(m.width)
 			m.viewport.SetHeight(vpHeight)
 		}
-		m.viewport.SetContent(m.renderEvents())
+		m.refreshContent()
 
 	case EventsFetchedMsg:
 		suppressNotify := m.shouldSuppressNotifications()
@@ -136,17 +137,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !suppressNotify {
 			m.checkMentions(msg.Events)
 		}
-		m.mergeEvents(msg.Events)
+		added := m.mergeEvents(msg.Events)
 		oldItemCount := len(m.displayItems)
 		m.buildDisplayItems()
 		if m.initialized {
-			// Only auto-scroll to bottom if user was already at the end
-			// or this is the first fetch.
-			wasAtEnd := m.selectedIdx >= oldItemCount-1 || oldItemCount == 0
+			// Only auto-scroll to bottom if user was already at the end or this is the first fetch.
+			wasAtEnd := m.selectedIdx >= oldItemCount-1
 			if wasAtEnd && len(m.displayItems) > 0 {
 				m.selectedIdx = len(m.displayItems) - 1
 			}
-			m.viewport.SetContent(m.renderEvents())
+			m.refreshContent()
 			if wasAtEnd {
 				m.viewport.GotoBottom()
 			}
@@ -154,7 +154,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selectedIdx = len(m.displayItems) - 1
 		}
 		// Lazily resolve truncated commit titles in the background.
-		cmds = append(cmds, m.resolveCommitTitles(msg.Events))
+		cmds = append(cmds, m.resolveCommitTitles(added))
 		// Schedule the next poll after a successful fetch (skip in demo mode).
 		if !m.demo {
 			cmds = append(cmds, tickCmd(m.cfg.PollInterval))
@@ -167,17 +167,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, tickCmd(m.backoffInterval()))
 
 	case CommitTitleMsg:
-		// Update the commit title on the matching event and rebuild display.
+		// Update the commit title on every event sharing the commit and rebuild display.
 		for i := range m.events {
-			if m.events[i].ID == msg.EventID && m.events[i].PushData != nil {
-				m.events[i].PushData.CommitTitle = msg.Title
-				break
+			pd := m.events[i].PushData
+			if pd != nil && m.events[i].ProjectID == msg.ProjectID && pd.CommitTo == msg.SHA {
+				pd.CommitTitle = msg.Title
 			}
 		}
 		m.buildDisplayItems()
-		if m.initialized {
-			m.viewport.SetContent(m.renderEvents())
-		}
+		m.refreshContent()
 
 	case TickMsg:
 		m.fetching = true
@@ -185,10 +183,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if m.showHelp {
-			if key.Matches(msg, m.keys.Help) || key.Matches(msg, m.keys.Quit) || msg.String() == "esc" {
+			if key.Matches(msg, m.keys.Help) || key.Matches(msg, m.keys.Quit) || key.Matches(msg, m.keys.Close) {
 				m.showHelp = false
-				m.viewport.SetContent(m.renderEvents())
-				return m, nil
+				m.refreshContent()
 			}
 			return m, nil
 		}
@@ -201,18 +198,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetContent(m.renderHelp())
 			return m, nil
 		case key.Matches(msg, m.keys.Open):
-			if m.selectedIdx >= 0 && m.selectedIdx < len(m.displayItems) {
-				e := m.displayItems[m.selectedIdx].primaryEvent
+			if e, ok := m.selectedEvent(); ok {
 				if host := m.gitlabHost(); host != "" {
 					_ = browser.OpenEvent(host, e)
 				}
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.OpenProject):
-			if m.selectedIdx >= 0 && m.selectedIdx < len(m.displayItems) {
-				e := m.displayItems[m.selectedIdx].primaryEvent
-				if host := m.gitlabHost(); host != "" && e.ProjectName != "" {
-					_ = browser.Open(fmt.Sprintf("%s/%s", strings.TrimRight(host, "/"), e.ProjectName))
+			if e, ok := m.selectedEvent(); ok && e.ProjectName != "" {
+				if host := m.gitlabHost(); host != "" {
+					_ = browser.Open(browser.ProjectURL(host, e.ProjectName))
 				}
 			}
 			return m, nil
@@ -228,22 +223,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.displayItems = m.displayItems[:0]
 			m.selectedIdx = 0
 			m.mentionCount = 0
+			m.refreshContent()
 			if m.initialized {
-				m.viewport.SetContent(m.renderEvents())
 				m.viewport.GotoTop()
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.ToggleTime):
 			event.RelativeTime = !event.RelativeTime
-			if m.initialized {
-				m.viewport.SetContent(m.renderEvents())
-			}
+			m.refreshContent()
 			return m, nil
 		case key.Matches(msg, m.keys.Up):
 			m.mentionCount = 0
 			if m.selectedIdx > 0 {
 				m.selectedIdx--
-				m.viewport.SetContent(m.renderEvents())
+				m.refreshContent()
 				m.scrollToSelected()
 			}
 			return m, nil
@@ -251,20 +244,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mentionCount = 0
 			if m.selectedIdx < len(m.displayItems)-1 {
 				m.selectedIdx++
-				m.viewport.SetContent(m.renderEvents())
+				m.refreshContent()
 				m.scrollToSelected()
 			}
 			return m, nil
 		case key.Matches(msg, m.keys.GoTop):
 			m.selectedIdx = 0
-			m.viewport.SetContent(m.renderEvents())
+			m.refreshContent()
 			m.viewport.GotoTop()
 			return m, nil
 		case key.Matches(msg, m.keys.GoBottom):
 			if len(m.displayItems) > 0 {
 				m.selectedIdx = len(m.displayItems) - 1
 			}
-			m.viewport.SetContent(m.renderEvents())
+			m.refreshContent()
 			m.viewport.GotoBottom()
 			return m, nil
 		}
@@ -279,17 +272,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Forward non-key messages to the viewport (window size, mouse wheel, etc.)
-	// but not key messages — we handle those ourselves for event selection.
-	if m.initialized && !m.showHelp {
-		switch msg.(type) {
-		case tea.KeyMsg:
-			// Handled above via key bindings — don't forward to viewport.
-		default:
-			var cmd tea.Cmd
-			m.viewport, cmd = m.viewport.Update(msg)
-			cmds = append(cmds, cmd)
-		}
+	// Forward non-key messages to the viewport (window size, mouse wheel, etc.);
+	// key messages are handled above via key bindings for event selection.
+	if _, isKey := msg.(tea.KeyMsg); !isKey && m.initialized && !m.showHelp {
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		cmds = append(cmds, cmd)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -336,12 +324,7 @@ func (m Model) renderHeader() string {
 			m.cfg.PollInterval)
 	}
 
-	spaces := m.width - lipgloss.Width(title) - lipgloss.Width(right) - 1
-	if spaces < 1 {
-		spaces = 1
-	}
-
-	return title + strings.Repeat(" ", spaces) + right
+	return event.AlignLeftRight(title, right, m.width)
 }
 
 func (m Model) renderDivider() string {
@@ -356,12 +339,7 @@ func (m Model) renderFooter() string {
 		eventCount = errorStyle.Render(fmt.Sprintf("error: %v", m.err))
 	}
 
-	spaces := m.width - lipgloss.Width(left) - lipgloss.Width(eventCount) - 1
-	if spaces < 1 {
-		spaces = 1
-	}
-
-	return footerStyle.Render(left + strings.Repeat(" ", spaces) + eventCount)
+	return footerStyle.Render(event.AlignLeftRight(left, eventCount, m.width))
 }
 
 func (m Model) renderEvents() string {
@@ -378,7 +356,7 @@ func (m Model) renderEvents() string {
 		contentWidth = 10
 	}
 
-	var blocks []string
+	blocks := make([]string, 0, len(m.displayItems))
 	for i, item := range m.displayItems {
 		var block string
 		if len(item.groupedRefs) > 1 {
@@ -387,20 +365,12 @@ func (m Model) renderEvents() string {
 			block = event.FormatEvent(item.primaryEvent, contentWidth)
 		}
 
-		// Add selection indicator.
+		// Prefix the first line with the selection indicator and indent continuation lines to match.
 		prefix := "  "
 		if i == m.selectedIdx {
 			prefix = selectedIndicatorStyle.Render("▸ ")
 		}
-		lines := strings.Split(block, "\n")
-		for j, line := range lines {
-			if j == 0 {
-				lines[j] = prefix + line
-			} else {
-				lines[j] = "  " + line
-			}
-		}
-		blocks = append(blocks, strings.Join(lines, "\n"))
+		blocks = append(blocks, prefix+strings.ReplaceAll(block, "\n", "\n  "))
 	}
 	sep := dividerStyle.Render(strings.Repeat("┄", m.width))
 	return strings.Join(blocks, "\n"+sep+"\n")
@@ -412,24 +382,12 @@ func (m Model) renderHelp() string {
 	b.WriteString(helpTitleStyle.Render("Keybindings"))
 	b.WriteString("\n\n")
 
-	bindings := []struct{ key, desc string }{
-		{"j / down", "Select next event"},
-		{"k / up", "Select previous event"},
-		{"g / Home", "Select first event"},
-		{"G / End", "Select last event"},
-		{"o / Enter", "Open event in browser"},
-		{"p", "Open project in browser"},
-		{"r", "Force refresh"},
-		{"c", "Clear events"},
-		{"t", "Toggle relative/absolute time"},
-		{"?", "Toggle this help"},
-		{"q / Ctrl+C", "Quit"},
-	}
-
-	for _, bind := range bindings {
-		line := fmt.Sprintf("  %-14s %s", bind.key, bind.desc)
-		b.WriteString(helpStyle.Render(line))
-		b.WriteString("\n")
+	for _, group := range m.keys.FullHelp() {
+		for _, binding := range group {
+			h := binding.Help()
+			b.WriteString(helpStyle.Render(fmt.Sprintf("  %-14s %s", h.Key, h.Desc)))
+			b.WriteString("\n")
+		}
 	}
 
 	return b.String()
@@ -457,13 +415,17 @@ func (m *Model) scrollToSelected() {
 	}
 }
 
-// resolveCommitTitles returns commands to fetch full titles for any push events
-// with truncated commit titles (ending in "..."). Called after events are fetched.
+/*
+resolveCommitTitles returns commands to fetch full titles for push events with truncated commit
+titles (ending in "..."), deduplicated per commit. Called with the genuinely new events of a fetch
+so already-known events don't re-resolve on every poll.
+*/
 func (m Model) resolveCommitTitles(newEvents []event.Event) tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
 	var cmds []tea.Cmd
+	requested := make(map[string]struct{})
 	for _, e := range newEvents {
 		if e.PushData == nil || e.PushData.CommitTo == "" {
 			continue
@@ -471,9 +433,29 @@ func (m Model) resolveCommitTitles(newEvents []event.Event) tea.Cmd {
 		if !strings.HasSuffix(e.PushData.CommitTitle, "...") {
 			continue
 		}
-		cmds = append(cmds, resolveCommitTitleCmd(m.client, e.ID, e.ProjectID, e.PushData.CommitTo, e.PushData.CommitTitle))
+		key := fmt.Sprintf("%d:%s", e.ProjectID, e.PushData.CommitTo)
+		if _, ok := requested[key]; ok {
+			continue
+		}
+		requested[key] = struct{}{}
+		cmds = append(cmds, resolveCommitTitleCmd(m.client, e.ProjectID, e.PushData.CommitTo, e.PushData.CommitTitle))
 	}
 	return tea.Batch(cmds...)
+}
+
+// refreshContent re-renders the event list into the viewport once it exists.
+func (m *Model) refreshContent() {
+	if m.initialized {
+		m.viewport.SetContent(m.renderEvents())
+	}
+}
+
+// selectedEvent returns the primary event of the selected display item.
+func (m Model) selectedEvent() (event.Event, bool) {
+	if m.selectedIdx < 0 || m.selectedIdx >= len(m.displayItems) {
+		return event.Event{}, false
+	}
+	return m.displayItems[m.selectedIdx].primaryEvent, true
 }
 
 // itemLineCount returns the number of rendered lines for a display item.
@@ -481,22 +463,15 @@ func (m Model) itemLineCount(idx int) int {
 	if idx < 0 || idx >= len(m.displayItems) {
 		return 1
 	}
-	item := m.displayItems[idx]
-	e := item.primaryEvent
-	lines := 1
-	if e.NoteBody != "" || (e.PushData != nil && e.PushData.CommitTitle != "") ||
-		(e.TargetTitle != "" && event.HasDetailTarget(e.TargetType)) {
-		lines = 2
+	if event.HasDetailLine(m.displayItems[idx].primaryEvent) {
+		return 2
 	}
-	return lines
+	return 1
 }
 
-// gitlabHost returns the configured GitLab host URL, or empty string.
+// gitlabHost returns the configured GitLab host URL.
 func (m Model) gitlabHost() string {
-	if m.cfg != nil {
-		return m.cfg.GitLabHost
-	}
-	return ""
+	return m.cfg.GitLabHost
 }
 
 // backoffInterval returns the retry interval with exponential backoff based on
@@ -543,7 +518,6 @@ func (m *Model) checkMentions(newEvents []event.Event) {
 	if event.CurrentUser == "" {
 		return
 	}
-	mention := "@" + event.CurrentUser
 	for _, e := range newEvents {
 		if _, seen := m.seenIDs[e.ID]; seen {
 			continue
@@ -551,11 +525,11 @@ func (m *Model) checkMentions(newEvents []event.Event) {
 		if e.AuthorUsername == event.CurrentUser {
 			continue
 		}
-		if !strings.Contains(e.NoteBody, mention) {
+		if !event.HasMention(e.NoteBody) {
 			continue
 		}
 		m.mentionCount++
-		if m.cfg != nil && m.cfg.Notifications {
+		if m.cfg.Notifications {
 			body := notify.FormatMention(e.AuthorUsername, e.ProjectName, e.NoteBody)
 			url := ""
 			if host := m.gitlabHost(); host != "" {
@@ -572,12 +546,16 @@ func (m *Model) buildDisplayItems() {
 	m.displayItems = m.displayItems[:0]
 	for i := 0; i < len(m.events); {
 		e := m.events[i]
-		k := event.PushGroupKey(e)
+		k, groupable := event.PushGroupKey(e)
 
-		if k != "" {
+		if groupable {
 			refs := []string{e.PushData.Ref}
 			j := i + 1
-			for j < len(m.events) && event.PushGroupKey(m.events[j]) == k {
+			for j < len(m.events) {
+				jk, ok := event.PushGroupKey(m.events[j])
+				if !ok || jk != k {
+					break
+				}
 				refs = append(refs, m.events[j].PushData.Ref)
 				j++
 			}
@@ -619,11 +597,14 @@ func (m Model) matchesFilter(e event.Event) bool {
 	return false
 }
 
-// mergeEvents deduplicates and appends new events to the model's event list,
-// maintaining ascending chronological order (oldest first, newest last).
-// The API returns events newest-first, so we iterate in reverse to append
-// them in chronological order. The list is trimmed from the front (oldest).
-func (m *Model) mergeEvents(newEvents []event.Event) {
+/*
+mergeEvents deduplicates and appends new events to the model's event list, maintaining ascending
+chronological order (oldest first, newest last). The API returns events newest-first, so we iterate
+in reverse to append them in chronological order. The list is trimmed from the front (oldest).
+Returns the events that were actually added.
+*/
+func (m *Model) mergeEvents(newEvents []event.Event) []event.Event {
+	var added []event.Event
 	for i := len(newEvents) - 1; i >= 0; i-- {
 		e := newEvents[i]
 		if _, seen := m.seenIDs[e.ID]; seen {
@@ -637,6 +618,7 @@ func (m *Model) mergeEvents(newEvents []event.Event) {
 		}
 		m.seenIDs[e.ID] = struct{}{}
 		m.events = append(m.events, e)
+		added = append(added, e)
 	}
 
 	if len(m.events) > maxEvents {
@@ -646,4 +628,6 @@ func (m *Model) mergeEvents(newEvents []event.Event) {
 		}
 		m.events = m.events[len(m.events)-maxEvents:]
 	}
+
+	return added
 }

@@ -20,10 +20,10 @@ func fetchEventsCmd(client *gitlab.Client, after *time.Time, pageSize int) tea.C
 }
 
 // resolveCommitTitleCmd fetches the full commit title in the background.
-func resolveCommitTitleCmd(client *gitlab.Client, eventID int, projectID int64, sha, fallback string) tea.Cmd {
+func resolveCommitTitleCmd(client *gitlab.Client, projectID int64, sha, fallback string) tea.Cmd {
 	return func() tea.Msg {
 		title := client.ResolveCommitTitle(projectID, sha, fallback)
-		return CommitTitleMsg{EventID: eventID, Title: title}
+		return CommitTitleMsg{ProjectID: projectID, SHA: sha, Title: title}
 	}
 }
 

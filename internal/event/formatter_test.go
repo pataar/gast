@@ -112,112 +112,45 @@ func TestFormatEvent_OpenedCreated(t *testing.T) {
 	}
 }
 
-// TestFormatEvent_Closed verifies formatting of closed events with issue target.
-func TestFormatEvent_Closed(t *testing.T) {
-	e := Event{
-		ActionName:     "closed",
-		AuthorUsername: "carol",
-		CreatedAt:      time.Date(2025, 1, 15, 14, 0, 0, 0, time.UTC),
-		ProjectName:    "backend",
-		TargetType:     "Issue",
-		TargetIID:      99,
-		TargetTitle:    "Fix login bug",
+// TestFormatEvent_Actions verifies the styled action verb and target label per action type.
+func TestFormatEvent_Actions(t *testing.T) {
+	tests := []struct {
+		name       string
+		actionName string
+		targetType string
+		targetIID  int
+		wantAction string
+		wantTarget string
+	}{
+		{"closed", "closed", "Issue", 99, "closed", "issue #99"},
+		{"accepted", "accepted", "MergeRequest", 7, "merged", "MR !7"},
+		{"merged", "merged", "MergeRequest", 7, "merged", "MR !7"},
+		{"commented on", "commented on", "Issue", 5, "commented on", "issue #5"},
+		{"approved", "approved", "MergeRequest", 12, "approved", "MR !12"},
+		{"deleted", "deleted", "Issue", 20, "deleted", "issue #20"},
+		{"unknown action", "snoozed", "Issue", 3, "snoozed", "issue #3"},
 	}
 
-	got := stripANSI(FormatEvent(e, 0))
-	if !strings.Contains(got, "closed") {
-		t.Errorf("FormatEvent() = %q, want it to contain %q", got, "closed")
-	}
-	if !strings.Contains(got, "issue #99") {
-		t.Errorf("FormatEvent() = %q, want it to contain %q", got, "issue #99")
-	}
-}
-
-// TestFormatEvent_Merged verifies formatting of merged events.
-func TestFormatEvent_Merged(t *testing.T) {
-	for _, action := range []string{"accepted", "merged"} {
-		t.Run(action, func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			e := Event{
-				ActionName:     action,
-				AuthorUsername: "dave",
+				ActionName:     tt.actionName,
+				AuthorUsername: "carol",
 				CreatedAt:      time.Date(2025, 1, 15, 14, 0, 0, 0, time.UTC),
-				ProjectName:    "frontend",
-				TargetType:     "MergeRequest",
-				TargetIID:      7,
-				TargetTitle:    "Refactor styles",
+				ProjectName:    "backend",
+				TargetType:     tt.targetType,
+				TargetIID:      tt.targetIID,
+				TargetTitle:    "Some title",
 			}
 
 			got := stripANSI(FormatEvent(e, 0))
-			if !strings.Contains(got, "merged") {
-				t.Errorf("FormatEvent() = %q, want it to contain %q", got, "merged")
+			if !strings.Contains(got, tt.wantAction) {
+				t.Errorf("FormatEvent() = %q, want it to contain %q", got, tt.wantAction)
 			}
-			if !strings.Contains(got, "MR !7") {
-				t.Errorf("FormatEvent() = %q, want it to contain %q", got, "MR !7")
+			if !strings.Contains(got, tt.wantTarget) {
+				t.Errorf("FormatEvent() = %q, want it to contain %q", got, tt.wantTarget)
 			}
 		})
-	}
-}
-
-// TestFormatEvent_CommentedOn verifies formatting of "commented on" events.
-func TestFormatEvent_CommentedOn(t *testing.T) {
-	e := Event{
-		ActionName:     "commented on",
-		AuthorUsername: "eve",
-		CreatedAt:      time.Date(2025, 1, 15, 14, 0, 0, 0, time.UTC),
-		ProjectName:    "api",
-		TargetType:     "Issue",
-		TargetIID:      5,
-		TargetTitle:    "Performance regression",
-	}
-
-	got := stripANSI(FormatEvent(e, 0))
-	if !strings.Contains(got, "commented on") {
-		t.Errorf("FormatEvent() = %q, want it to contain %q", got, "commented on")
-	}
-	if !strings.Contains(got, "issue #5") {
-		t.Errorf("FormatEvent() = %q, want it to contain %q", got, "issue #5")
-	}
-}
-
-// TestFormatEvent_Approved verifies formatting of approved events.
-func TestFormatEvent_Approved(t *testing.T) {
-	e := Event{
-		ActionName:     "approved",
-		AuthorUsername: "frank",
-		CreatedAt:      time.Date(2025, 1, 15, 14, 0, 0, 0, time.UTC),
-		ProjectName:    "core",
-		TargetType:     "MergeRequest",
-		TargetIID:      12,
-		TargetTitle:    "Upgrade dependencies",
-	}
-
-	got := stripANSI(FormatEvent(e, 0))
-	if !strings.Contains(got, "approved") {
-		t.Errorf("FormatEvent() = %q, want it to contain %q", got, "approved")
-	}
-	if !strings.Contains(got, "MR !12") {
-		t.Errorf("FormatEvent() = %q, want it to contain %q", got, "MR !12")
-	}
-}
-
-// TestFormatEvent_Deleted verifies formatting of deleted events.
-func TestFormatEvent_Deleted(t *testing.T) {
-	e := Event{
-		ActionName:     "deleted",
-		AuthorUsername: "grace",
-		CreatedAt:      time.Date(2025, 1, 15, 14, 0, 0, 0, time.UTC),
-		ProjectName:    "infra",
-		TargetType:     "Issue",
-		TargetIID:      20,
-		TargetTitle:    "Old issue",
-	}
-
-	got := stripANSI(FormatEvent(e, 0))
-	if !strings.Contains(got, "deleted") {
-		t.Errorf("FormatEvent() = %q, want it to contain %q", got, "deleted")
-	}
-	if !strings.Contains(got, "issue #20") {
-		t.Errorf("FormatEvent() = %q, want it to contain %q", got, "issue #20")
 	}
 }
 
@@ -248,27 +181,6 @@ func TestFormatEvent_TitleTruncation(t *testing.T) {
 	}
 	if !strings.HasSuffix(detail, "...") {
 		t.Error("detail should end with '...' when truncated")
-	}
-}
-
-// TestFormatEvent_UnknownAction verifies that unknown action types fall through to the default.
-func TestFormatEvent_UnknownAction(t *testing.T) {
-	e := Event{
-		ActionName:     "snoozed",
-		AuthorUsername: "iris",
-		CreatedAt:      time.Date(2025, 1, 15, 14, 0, 0, 0, time.UTC),
-		ProjectName:    "myproject",
-		TargetType:     "Issue",
-		TargetIID:      3,
-		TargetTitle:    "Some issue",
-	}
-
-	got := stripANSI(FormatEvent(e, 0))
-	if !strings.Contains(got, "snoozed") {
-		t.Errorf("FormatEvent() = %q, want it to contain action %q", got, "snoozed")
-	}
-	if !strings.Contains(got, "issue #3") {
-		t.Errorf("FormatEvent() = %q, want it to contain %q", got, "issue #3")
 	}
 }
 

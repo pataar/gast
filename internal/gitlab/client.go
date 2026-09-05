@@ -12,8 +12,7 @@ import (
 	gl "gitlab.com/gitlab-org/api/client-go"
 )
 
-// maxCommitCache is the upper bound on cached commit titles. When exceeded,
-// the cache is cleared to reclaim memory.
+// maxCommitCache is the upper bound on cached commit titles; a batch of entries is evicted when exceeded.
 const maxCommitCache = 256
 
 // Client wraps the go-gitlab API client and maintains a cache of project ID
@@ -88,14 +87,11 @@ func (c *Client) FetchEvents(after *time.Time, pageSize int) ([]event.Event, err
 				CommitTitle: re.PushData.CommitTitle,
 				CommitTo:    re.PushData.CommitTo,
 				Ref:         re.PushData.Ref,
-				RefType:     re.PushData.RefType,
 			}
 		}
 
 		if re.Note != nil {
-			if re.Note.Body != "" {
-				e.NoteBody = re.Note.Body
-			}
+			e.NoteBody = re.Note.Body
 			e.NoteID = int(re.Note.ID)
 			e.NoteableType = re.Note.NoteableType
 			e.NoteableIID = int(re.Note.NoteableIID)
@@ -145,7 +141,13 @@ func (c *Client) ResolveCommitTitle(projectID int64, sha, fallback string) strin
 
 	c.mu.Lock()
 	if len(c.commitCache) >= maxCommitCache {
-		c.commitCache = make(map[string]string)
+		// Evict an arbitrary half instead of flushing, so most cached titles survive.
+		for k := range c.commitCache {
+			delete(c.commitCache, k)
+			if len(c.commitCache) < maxCommitCache/2 {
+				break
+			}
+		}
 	}
 	c.commitCache[key] = commit.Title
 	c.mu.Unlock()
