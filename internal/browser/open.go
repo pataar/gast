@@ -35,15 +35,18 @@ func EventURL(host string, e event.Event) string {
 		return fmt.Sprintf("%s/%s/-/tree/%s", host, project, e.PushData.Ref)
 	case strings.EqualFold(e.TargetType, "MergeRequest") && e.TargetIID > 0:
 		return fmt.Sprintf("%s/%s/-/merge_requests/%d", host, project, e.TargetIID)
-	case strings.EqualFold(e.TargetType, "Issue") && e.TargetIID > 0:
-		return fmt.Sprintf("%s/%s/-/issues/%d", host, project, e.TargetIID)
-	case strings.EqualFold(e.TargetType, "WorkItem") && e.TargetIID > 0:
+	case event.IsIssueTargetType(e.TargetType) && e.TargetIID > 0:
 		return fmt.Sprintf("%s/%s/-/issues/%d", host, project, e.TargetIID)
 	case event.IsNoteTargetType(e.TargetType):
 		return noteURL(host, project, e)
 	default:
-		return fmt.Sprintf("%s/%s", host, project)
+		return ProjectURL(host, project)
 	}
+}
+
+// ProjectURL returns the web URL of a project's home page.
+func ProjectURL(host, project string) string {
+	return fmt.Sprintf("%s/%s", strings.TrimRight(host, "/"), project)
 }
 
 // noteURL constructs the URL for a comment event using the note's parent type.
@@ -58,17 +61,14 @@ func noteURL(host, project string, e event.Event) string {
 	if e.NoteID > 0 {
 		anchor = fmt.Sprintf("#note_%d", e.NoteID)
 	}
-	nt := strings.ToLower(e.NoteableType)
 	switch {
-	case (nt == "issue" || nt == "workitem") && iid > 0:
+	case event.IsIssueTargetType(e.NoteableType) && iid > 0:
 		return fmt.Sprintf("%s/%s/-/issues/%d%s", host, project, iid, anchor)
-	case nt == "mergerequest" && iid > 0:
-		return fmt.Sprintf("%s/%s/-/merge_requests/%d%s", host, project, iid, anchor)
 	case iid > 0:
-		// Fallback when NoteableType is empty (older API responses).
+		// MergeRequest, which is also the fallback when NoteableType is empty (older API responses).
 		return fmt.Sprintf("%s/%s/-/merge_requests/%d%s", host, project, iid, anchor)
 	default:
-		return fmt.Sprintf("%s/%s", host, project)
+		return ProjectURL(host, project)
 	}
 }
 

@@ -26,10 +26,11 @@ var projectFilters, groupFilters []string
 
 // rootCmd is the top-level cobra command that launches the TUI.
 var rootCmd = &cobra.Command{
-	Use:   "gast",
-	Short: "GitLab Activity Stream TUI",
-	Long:  "A terminal UI that mirrors your GitLab dashboard activity stream with live polling.",
-	RunE:  run,
+	Use:          "gast",
+	Short:        "GitLab Activity Stream TUI",
+	Long:         "A terminal UI that mirrors your GitLab dashboard activity stream with live polling.",
+	RunE:         run,
+	SilenceUsage: true,
 }
 
 func init() {
@@ -87,12 +88,8 @@ func runDemo() error {
 
 // runTUI starts a Bubble Tea program with the given model.
 func runTUI(model tea.Model) error {
-	p := tea.NewProgram(model)
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-	return nil
+	_, err := tea.NewProgram(model).Run()
+	return err
 }
 
 // Execute runs the root command and exits with code 1 on failure.

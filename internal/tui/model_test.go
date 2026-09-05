@@ -7,12 +7,14 @@ import (
 	"github.com/pataar/gast/internal/event"
 )
 
-// TestMergeEvents_DeduplicatesByID verifies that mergeEvents does not add events
-// with IDs that have already been seen.
+// newTestModel builds a minimal Model with the state mergeEvents and friends require.
+func newTestModel() *Model {
+	return &Model{seenIDs: make(map[int]struct{})}
+}
+
+// TestMergeEvents_DeduplicatesByID verifies that mergeEvents does not add events with already-seen IDs.
 func TestMergeEvents_DeduplicatesByID(t *testing.T) {
-	m := &Model{
-		seenIDs: make(map[int]struct{}),
-	}
+	m := newTestModel()
 
 	initial := []event.Event{
 		{ID: 1, AuthorUsername: "alice"},
@@ -45,9 +47,7 @@ func TestMergeEvents_DeduplicatesByID(t *testing.T) {
 // TestMergeEvents_AppendsNewEvents verifies that new events are appended so
 // the newest events appear last in the slice (chronological order).
 func TestMergeEvents_AppendsNewEvents(t *testing.T) {
-	m := &Model{
-		seenIDs: make(map[int]struct{}),
-	}
+	m := newTestModel()
 
 	m.mergeEvents([]event.Event{
 		{ID: 1, AuthorUsername: "first"},
@@ -73,9 +73,7 @@ func TestMergeEvents_AppendsNewEvents(t *testing.T) {
 // TestMergeEvents_CapsAtMaxEvents verifies that the events slice never exceeds
 // the maxEvents limit (500).
 func TestMergeEvents_CapsAtMaxEvents(t *testing.T) {
-	m := &Model{
-		seenIDs: make(map[int]struct{}),
-	}
+	m := newTestModel()
 
 	// Fill up to maxEvents. API returns newest-first, so we build the batch
 	// with descending IDs to mimic real API order.
@@ -114,9 +112,7 @@ func TestMergeEvents_CapsAtMaxEvents(t *testing.T) {
 // TestMergeEvents_CleansUpSeenIDs verifies that seenIDs entries are removed
 // for events that get trimmed when the list exceeds maxEvents.
 func TestMergeEvents_CleansUpSeenIDs(t *testing.T) {
-	m := &Model{
-		seenIDs: make(map[int]struct{}),
-	}
+	m := newTestModel()
 
 	// Fill up to maxEvents (API order: newest first → descending IDs).
 	batch := make([]event.Event, maxEvents)
@@ -155,7 +151,8 @@ func TestMergeEvents_CleansUpSeenIDs(t *testing.T) {
 // during the initial fetch and the first fetch after clearing events.
 func TestShouldSuppressNotifications(t *testing.T) {
 	t.Run("initial fetch", func(t *testing.T) {
-		m := &Model{seenIDs: make(map[int]struct{}), initialFetch: true}
+		m := newTestModel()
+		m.initialFetch = true
 		if !m.shouldSuppressNotifications() {
 			t.Error("expected suppression during initial fetch")
 		}
@@ -163,7 +160,8 @@ func TestShouldSuppressNotifications(t *testing.T) {
 
 	t.Run("first fetch after clear", func(t *testing.T) {
 		now := time.Now()
-		m := &Model{seenIDs: make(map[int]struct{}), clearedAt: &now}
+		m := newTestModel()
+		m.clearedAt = &now
 		if !m.shouldSuppressNotifications() {
 			t.Error("expected suppression on first fetch after clear")
 		}
@@ -171,18 +169,16 @@ func TestShouldSuppressNotifications(t *testing.T) {
 
 	t.Run("subsequent fetch after clear", func(t *testing.T) {
 		now := time.Now()
-		m := &Model{
-			seenIDs:   make(map[int]struct{}),
-			clearedAt: &now,
-			events:    []event.Event{{ID: 1}},
-		}
+		m := newTestModel()
+		m.clearedAt = &now
+		m.events = []event.Event{{ID: 1}}
 		if m.shouldSuppressNotifications() {
 			t.Error("should not suppress when events already present after clear")
 		}
 	})
 
 	t.Run("normal fetch", func(t *testing.T) {
-		m := &Model{seenIDs: make(map[int]struct{})}
+		m := newTestModel()
 		if m.shouldSuppressNotifications() {
 			t.Error("should not suppress during normal fetch")
 		}

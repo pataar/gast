@@ -56,7 +56,6 @@ func Load(cfgFile string) (*Config, error) {
 	viper.SetDefault("show_full_project_path", false)
 	viper.SetDefault("notifications", false)
 
-	viper.SetEnvPrefix("GITLAB_ACTIVITY")
 	viper.BindEnv("gitlab_host", "GITLAB_ACTIVITY_HOST")
 	viper.BindEnv("token", "GITLAB_ACTIVITY_TOKEN")
 	viper.BindEnv("poll_interval", "GITLAB_ACTIVITY_INTERVAL")
