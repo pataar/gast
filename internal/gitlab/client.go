@@ -15,6 +15,9 @@ import (
 // maxCommitCache is the upper bound on cached commit titles; a batch of entries is evicted when exceeded.
 const maxCommitCache = 256
 
+// maxConcurrentProjectResolves bounds parallel GetProject calls when warming the project cache.
+const maxConcurrentProjectResolves = 8
+
 // Client wraps the go-gitlab API client and maintains a cache of project ID
 // to path-with-namespace mappings to reduce API calls.
 type Client struct {
@@ -59,6 +62,7 @@ func (c *Client) FetchEvents(after *time.Time, pageSize int) ([]event.Event, err
 	}
 
 	events := make([]event.Event, 0, len(raw))
+	projectIDs := make(map[int64]struct{})
 	for _, re := range raw {
 		// Skip push events that are merge commits or have no actual commits.
 		if re.PushData.CommitCount > 0 && isMergeCommit(re.PushData.CommitTitle) {
@@ -98,8 +102,13 @@ func (c *Client) FetchEvents(after *time.Time, pageSize int) ([]event.Event, err
 		}
 
 		e.ProjectID = re.ProjectID
-		e.ProjectName = c.resolveProject(re.ProjectID)
+		projectIDs[re.ProjectID] = struct{}{}
 		events = append(events, e)
+	}
+
+	names := c.resolveProjects(projectIDs)
+	for i := range events {
+		events[i].ProjectName = names[events[i].ProjectID]
 	}
 
 	return events, nil
@@ -153,6 +162,32 @@ func (c *Client) ResolveCommitTitle(projectID int64, sha, fallback string) strin
 	c.mu.Unlock()
 
 	return commit.Title
+}
+
+/*
+resolveProjects resolves the path-with-namespace for every given project ID and returns them keyed
+by ID. Cache misses are fetched concurrently (bounded by maxConcurrentProjectResolves) so a cold
+cache costs roughly one round-trip instead of one per project.
+*/
+func (c *Client) resolveProjects(ids map[int64]struct{}) map[int64]string {
+	names := make(map[int64]string, len(ids))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, maxConcurrentProjectResolves)
+	for id := range ids {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			name := c.resolveProject(id)
+			<-sem
+			mu.Lock()
+			names[id] = name
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	return names
 }
 
 // resolveProject looks up a project's path-with-namespace by its ID, using

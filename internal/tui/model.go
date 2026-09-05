@@ -58,6 +58,14 @@ type Model struct {
 	displayItems    []displayItem
 	selectedIdx     int
 	mentionCount    int // unread @mention count
+
+	/*
+		Render caches: blocks are selection-independent, so cursor moves reuse them and only
+		rebuild the selection prefixes. Invalidated on fetch, resize, clear, and time toggle.
+	*/
+	renderedBlocks []string
+	dividerLine    string // header/footer divider, cached per width
+	separatorLine  string // between-items separator, cached per width
 }
 
 // NewModel creates a new TUI model wired to the given GitLab client and config.
@@ -111,6 +119,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.dividerLine = dividerStyle.Render(strings.Repeat("─", m.width))
+		m.separatorLine = dividerStyle.Render(strings.Repeat("┄", m.width))
+		m.renderedBlocks = nil
 		headerHeight := 2
 		footerHeight := 2
 		vpHeight := m.height - headerHeight - footerHeight
@@ -221,6 +232,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.events = m.events[:0]
 			m.seenIDs = make(map[int]struct{})
 			m.displayItems = m.displayItems[:0]
+			m.renderedBlocks = nil
 			m.selectedIdx = 0
 			m.mentionCount = 0
 			m.refreshContent()
@@ -230,6 +242,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case key.Matches(msg, m.keys.ToggleTime):
 			event.RelativeTime = !event.RelativeTime
+			m.renderedBlocks = nil
 			m.refreshContent()
 			return m, nil
 		case key.Matches(msg, m.keys.Up):
@@ -328,7 +341,7 @@ func (m Model) renderHeader() string {
 }
 
 func (m Model) renderDivider() string {
-	return dividerStyle.Render(strings.Repeat("─", m.width))
+	return m.dividerLine
 }
 
 func (m Model) renderFooter() string {
@@ -342,7 +355,7 @@ func (m Model) renderFooter() string {
 	return footerStyle.Render(event.AlignLeftRight(left, eventCount, m.width))
 }
 
-func (m Model) renderEvents() string {
+func (m *Model) renderEvents() string {
 	if len(m.displayItems) == 0 {
 		if m.clearedAt != nil {
 			return "\n  No events yet. Waiting for new events..."
@@ -356,24 +369,29 @@ func (m Model) renderEvents() string {
 		contentWidth = 10
 	}
 
-	blocks := make([]string, 0, len(m.displayItems))
-	for i, item := range m.displayItems {
-		var block string
-		if len(item.groupedRefs) > 1 {
-			block = event.FormatGroupedPush(item.primaryEvent, item.groupedRefs, contentWidth)
-		} else {
-			block = event.FormatEvent(item.primaryEvent, contentWidth)
+	if len(m.renderedBlocks) != len(m.displayItems) {
+		m.renderedBlocks = make([]string, len(m.displayItems))
+		for i, item := range m.displayItems {
+			var block string
+			if len(item.groupedRefs) > 1 {
+				block = event.FormatGroupedPush(item.primaryEvent, item.groupedRefs, contentWidth)
+			} else {
+				block = event.FormatEvent(item.primaryEvent, contentWidth)
+			}
+			// Indent continuation lines to match the 2-char selection prefix.
+			m.renderedBlocks[i] = strings.ReplaceAll(block, "\n", "\n  ")
 		}
+	}
 
-		// Prefix the first line with the selection indicator and indent continuation lines to match.
+	lines := make([]string, len(m.renderedBlocks))
+	for i, block := range m.renderedBlocks {
 		prefix := "  "
 		if i == m.selectedIdx {
 			prefix = selectedIndicatorStyle.Render("▸ ")
 		}
-		blocks = append(blocks, prefix+strings.ReplaceAll(block, "\n", "\n  "))
+		lines[i] = prefix + block
 	}
-	sep := dividerStyle.Render(strings.Repeat("┄", m.width))
-	return strings.Join(blocks, "\n"+sep+"\n")
+	return strings.Join(lines, "\n"+m.separatorLine+"\n")
 }
 
 func (m Model) renderHelp() string {
@@ -544,6 +562,7 @@ func (m *Model) checkMentions(newEvents []event.Event) {
 // event list, grouping consecutive push events with the same author+commit.
 func (m *Model) buildDisplayItems() {
 	m.displayItems = m.displayItems[:0]
+	m.renderedBlocks = nil
 	for i := 0; i < len(m.events); {
 		e := m.events[i]
 		k, groupable := event.PushGroupKey(e)
