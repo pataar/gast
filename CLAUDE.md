@@ -61,7 +61,7 @@ internal/
 
 - File: `~/.config/gast/config.toml` (XDG via `os.UserConfigDir()`)
 - Env overrides: `GITLAB_ACTIVITY_HOST`, `GITLAB_ACTIVITY_TOKEN`, `GITLAB_ACTIVITY_INTERVAL`, `GITLAB_ACTIVITY_PAGE_SIZE`
-- Config fields: `gitlab_host`, `token`, `poll_interval`, `page_size`, `show_full_project_path`, `notifications`
+- Config fields: `gitlab_host`, `token`, `poll_interval`, `page_size`, `show_full_project_path`, `notifications`, `filter_bots` (default `true`; hides bot events unless they @mention the user)
 - Priority: CLI flags > env vars > config file > defaults
 - Run `gast configure` for interactive setup with validation
 

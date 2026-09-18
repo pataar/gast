@@ -3,9 +3,18 @@
 package event
 
 import (
+	"regexp"
 	"strings"
 	"time"
 )
+
+// ponytail: username heuristic because the events API exposes no bot flag; look up the Users API `bot` field if this misfires.
+var botUsernamePattern = regexp.MustCompile(`(?i)^((project|group)_\d+_bot|service_account_)|([-_]bot|\[bot\])$`)
+
+// IsBotUsername reports whether the username looks like a bot: GitLab access-token/service accounts or a bot suffix.
+func IsBotUsername(username string) bool {
+	return botUsernamePattern.MatchString(username)
+}
 
 // PushData holds details about a git push event, including the number of commits and the branch or tag reference.
 type PushData struct {

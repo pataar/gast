@@ -597,6 +597,11 @@ func (m *Model) SetFilters(projects, groups []string) {
 	m.groupFilters = groups
 }
 
+// isFilteredBot returns true for bot-authored events that should be hidden; bots mentioning the current user stay visible.
+func (m Model) isFilteredBot(e event.Event) bool {
+	return m.cfg != nil && m.cfg.FilterBots && event.IsBotUsername(e.AuthorUsername) && !event.HasMention(e.NoteBody)
+}
+
 // matchesFilter returns true if the event matches the configured project/group
 // filters, or if no filters are set.
 func (m Model) matchesFilter(e event.Event) bool {
@@ -632,7 +637,7 @@ func (m *Model) mergeEvents(newEvents []event.Event) []event.Event {
 		if m.clearedAt != nil && e.CreatedAt.Before(*m.clearedAt) {
 			continue
 		}
-		if !m.matchesFilter(e) {
+		if !m.matchesFilter(e) || m.isFilteredBot(e) {
 			continue
 		}
 		m.seenIDs[e.ID] = struct{}{}

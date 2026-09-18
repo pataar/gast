@@ -75,6 +75,7 @@ gast
 Config file location: `~/.config/gast/config.toml` (follows [XDG Base Directory](https://specifications.freedesktop.org/basedir-spec/latest/) on Linux/macOS, `%AppData%` on Windows).
 
 ```toml
+filter_bots = true  # hide bot activity, except bots that @mention you
 gitlab_host = "https://gitlab.example.com"
 notifications = false
 page_size = 50
