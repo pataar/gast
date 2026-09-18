@@ -4,19 +4,21 @@ import "charm.land/bubbles/v2/key"
 
 // KeyMap defines all key bindings used by the TUI. Fields are ordered alphabetically for consistency.
 type KeyMap struct {
-	Clear       key.Binding
-	Close       key.Binding
-	Down        key.Binding
-	GoBottom    key.Binding
-	GoTop       key.Binding
-	Help        key.Binding
-	Open        key.Binding
-	OpenProject key.Binding
-	Quit        key.Binding
-	Refresh     key.Binding
-	ToggleBots  key.Binding
-	ToggleTime  key.Binding
-	Up          key.Binding
+	Clear          key.Binding
+	Close          key.Binding
+	Down           key.Binding
+	GoBottom       key.Binding
+	GoTop          key.Binding
+	Help           key.Binding
+	NextMention    key.Binding
+	Open           key.Binding
+	OpenProject    key.Binding
+	Quit           key.Binding
+	Refresh        key.Binding
+	ToggleBots     key.Binding
+	ToggleMentions key.Binding
+	ToggleTime     key.Binding
+	Up             key.Binding
 }
 
 // defaultKeyMap returns the default set of key bindings for navigation, refreshing, help, and quitting.
@@ -46,6 +48,10 @@ func defaultKeyMap() KeyMap {
 			key.WithKeys("?"),
 			key.WithHelp("?", "Toggle this help"),
 		),
+		NextMention: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "Select next @mention"),
+		),
 		Open: key.NewBinding(
 			key.WithKeys("o", "enter"),
 			key.WithHelp("o / Enter", "Open event in browser"),
@@ -66,6 +72,10 @@ func defaultKeyMap() KeyMap {
 			key.WithKeys("b"),
 			key.WithHelp("b", "Show/hide bot activity"),
 		),
+		ToggleMentions: key.NewBinding(
+			key.WithKeys("m"),
+			key.WithHelp("m", "Show only @mentions"),
+		),
 		ToggleTime: key.NewBinding(
 			key.WithKeys("t"),
 			key.WithHelp("t", "Toggle relative/absolute time"),
@@ -80,7 +90,7 @@ func defaultKeyMap() KeyMap {
 // FullHelp returns all key bindings grouped by category, in the order shown in the help overlay.
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Down, k.Up, k.GoTop, k.GoBottom},
-		{k.Open, k.OpenProject, k.Refresh, k.Clear, k.ToggleBots, k.ToggleTime, k.Help, k.Quit},
+		{k.Down, k.Up, k.GoTop, k.GoBottom, k.NextMention},
+		{k.Open, k.OpenProject, k.Refresh, k.Clear, k.ToggleBots, k.ToggleMentions, k.ToggleTime, k.Help, k.Quit},
 	}
 }

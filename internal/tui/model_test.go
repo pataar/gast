@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -287,6 +288,73 @@ func TestClearKey_ResetsHiddenBotCount(t *testing.T) {
 	m = pressKey(t, m, 'c')
 	if m.hiddenBotCount != 0 {
 		t.Errorf("hiddenBotCount = %d after clear, want 0", m.hiddenBotCount)
+	}
+}
+
+// mentionTestModel returns a demo model holding, oldest to newest: a mention (1), a plain event (2),
+// the user's own comment quoting their handle (3), a plain event (4), and another mention (5).
+func mentionTestModel(t *testing.T) Model {
+	t.Helper()
+	t.Cleanup(func() { event.CurrentUser = "" })
+
+	m := NewDemoModel(&config.Config{Username: "pieter"}, nil)
+	m.mergeEvents([]event.Event{
+		{ID: 5, AuthorUsername: "bob", NoteBody: "@pieter can you review?"},
+		{ID: 4, AuthorUsername: "alice"},
+		{ID: 3, AuthorUsername: "pieter", NoteBody: "cc @pieter"},
+		{ID: 2, AuthorUsername: "alice", NoteBody: "looks good"},
+		{ID: 1, AuthorUsername: "alice", NoteBody: "ping @pieter"},
+	})
+	m.buildDisplayItems()
+	return m
+}
+
+func displayedIDs(m Model) []int {
+	ids := make([]int, len(m.displayItems))
+	for i, item := range m.displayItems {
+		ids[i] = item.primaryEvent.ID
+	}
+	return ids
+}
+
+func TestMentionsOnlyKey_ShowsOnlyMentionsByOthers(t *testing.T) {
+	m := mentionTestModel(t)
+
+	m = pressKey(t, m, 'm')
+	if got := displayedIDs(m); !slices.Equal(got, []int{1, 5}) {
+		t.Fatalf("mentions only: displayed IDs = %v, want [1 5]", got)
+	}
+
+	m = pressKey(t, m, 'm')
+	if got := displayedIDs(m); len(got) != 5 {
+		t.Fatalf("mentions view off: displayed IDs = %v, want all 5", got)
+	}
+}
+
+func TestNextMentionKey_JumpsForwardAndWraps(t *testing.T) {
+	m := mentionTestModel(t)
+	m.selectedIdx = 1
+
+	m = pressKey(t, m, 'n')
+	if selected, _ := m.selectedEvent(); selected.ID != 5 {
+		t.Fatalf("first n: selected event %d, want 5", selected.ID)
+	}
+
+	m = pressKey(t, m, 'n')
+	if selected, _ := m.selectedEvent(); selected.ID != 1 {
+		t.Fatalf("second n: selected event %d, want 1 (wrap around)", selected.ID)
+	}
+}
+
+func TestNextMentionKey_WithoutMentionsKeepsSelection(t *testing.T) {
+	m := NewDemoModel(&config.Config{}, nil)
+	m.mergeEvents([]event.Event{{ID: 2, AuthorUsername: "alice"}, {ID: 1, AuthorUsername: "bob"}})
+	m.buildDisplayItems()
+	m.selectedIdx = 1
+
+	m = pressKey(t, m, 'n')
+	if m.selectedIdx != 1 {
+		t.Errorf("selectedIdx = %d, want 1", m.selectedIdx)
 	}
 }
 

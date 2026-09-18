@@ -380,3 +380,42 @@ func TestIsBotUsername(t *testing.T) {
 		}
 	}
 }
+
+func TestHasMention_RequiresUsernameBoundary(t *testing.T) {
+	CurrentUser = "pieter"
+	t.Cleanup(func() { CurrentUser = "" })
+
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{"@pieter", true},
+		{"ping @pieter can you look?", true},
+		{"thanks @pieter.", true},
+		{"(cc @pieter)", true},
+		{"@pieter, @alice", true},
+		{"@pieter-", true},
+		{"@pieter2 is someone else", false},
+		{"@pieterjan is someone else", false},
+		{"@pieter_w is someone else", false},
+		{"@pieter-w is someone else", false},
+		{"@pieter.w is someone else", false},
+		{"@pieter2 and @pieter", true},
+		{"mail foo@pieter for access", false},
+		{"foo.bar@pieter", false},
+		{"foo@pieter and @pieter", true},
+		{"(@pieter)", true},
+		{"cc:@pieter", true},
+		{"no mention here", false},
+	}
+	for _, testCase := range cases {
+		if got := HasMention(testCase.text); got != testCase.want {
+			t.Errorf("HasMention(%q) = %v, want %v", testCase.text, got, testCase.want)
+		}
+	}
+
+	CurrentUser = ""
+	if HasMention("@pieter") {
+		t.Error("HasMention must be false without a current user")
+	}
+}
