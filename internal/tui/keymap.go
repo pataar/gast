@@ -14,6 +14,7 @@ type KeyMap struct {
 	OpenProject key.Binding
 	Quit        key.Binding
 	Refresh     key.Binding
+	ToggleBots  key.Binding
 	ToggleTime  key.Binding
 	Up          key.Binding
 }
@@ -61,6 +62,10 @@ func defaultKeyMap() KeyMap {
 			key.WithKeys("r"),
 			key.WithHelp("r", "Force refresh"),
 		),
+		ToggleBots: key.NewBinding(
+			key.WithKeys("b"),
+			key.WithHelp("b", "Show/hide bot activity"),
+		),
 		ToggleTime: key.NewBinding(
 			key.WithKeys("t"),
 			key.WithHelp("t", "Toggle relative/absolute time"),
@@ -76,6 +81,6 @@ func defaultKeyMap() KeyMap {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Down, k.Up, k.GoTop, k.GoBottom},
-		{k.Open, k.OpenProject, k.Refresh, k.Clear, k.ToggleTime, k.Help, k.Quit},
+		{k.Open, k.OpenProject, k.Refresh, k.Clear, k.ToggleBots, k.ToggleTime, k.Help, k.Quit},
 	}
 }

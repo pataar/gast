@@ -20,6 +20,7 @@ import (
 
 // maxEvents is the upper bound on events kept in memory. Older events beyond
 // this limit are discarded to prevent unbounded memory growth.
+// ponytail: hidden bot events count toward the cap; cap visible and hidden separately if bots crowd out humans.
 const maxEvents = 500
 
 // displayItem represents a visual item in the event list. A single item may
@@ -56,6 +57,8 @@ type Model struct {
 	projectFilters  []string   // filter events to these project path substrings
 	groupFilters    []string   // filter events to these group path prefixes
 	displayItems    []displayItem
+	hideBots        bool // view-time bot filter, toggled at runtime; starts from cfg.FilterBots
+	hiddenBotCount  int  // bot events currently hidden by hideBots
 	selectedIdx     int
 	mentionCount    int // unread @mention count
 
@@ -82,6 +85,7 @@ func NewModel(client *gitlab.Client, cfg *config.Config) Model {
 		seenIDs:      make(map[int]struct{}),
 		spinner:      s,
 		keys:         defaultKeyMap(),
+		hideBots:     cfg.FilterBots,
 		initialFetch: true,
 	}
 }
@@ -149,20 +153,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.checkMentions(msg.Events)
 		}
 		added := m.mergeEvents(msg.Events)
-		oldItemCount := len(m.displayItems)
-		m.buildDisplayItems()
-		if m.initialized {
-			// Only auto-scroll to bottom if user was already at the end or this is the first fetch.
-			wasAtEnd := m.selectedIdx >= oldItemCount-1
-			if wasAtEnd && len(m.displayItems) > 0 {
-				m.selectedIdx = len(m.displayItems) - 1
-			}
-			m.refreshContent()
-			if wasAtEnd {
-				m.viewport.GotoBottom()
-			}
-		} else if len(m.displayItems) > 0 {
-			m.selectedIdx = len(m.displayItems) - 1
+		// Only follow new events if the user was already at the end (or nothing is laid out yet).
+		wasAtEnd := !m.initialized || m.selectedIdx >= len(m.displayItems)-1
+		m.rebuildItemsKeepingSelection()
+		if wasAtEnd {
+			m.selectedIdx = max(len(m.displayItems)-1, 0)
+		}
+		m.refreshContent()
+		if wasAtEnd && m.initialized {
+			m.viewport.GotoBottom()
 		}
 		// Lazily resolve truncated commit titles in the background.
 		cmds = append(cmds, m.resolveCommitTitles(added))
@@ -231,14 +230,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clearedAt = &now
 			m.events = m.events[:0]
 			m.seenIDs = make(map[int]struct{})
-			m.displayItems = m.displayItems[:0]
-			m.renderedBlocks = nil
+			m.buildDisplayItems()
 			m.selectedIdx = 0
 			m.mentionCount = 0
 			m.refreshContent()
 			if m.initialized {
 				m.viewport.GotoTop()
 			}
+			return m, nil
+		case key.Matches(msg, m.keys.ToggleBots):
+			m.hideBots = !m.hideBots
+			m.rebuildView()
 			return m, nil
 		case key.Matches(msg, m.keys.ToggleTime):
 			event.RelativeTime = !event.RelativeTime
@@ -347,7 +349,10 @@ func (m Model) renderDivider() string {
 func (m Model) renderFooter() string {
 	left := " j/k select  o open  p project  r refresh  c clear  t time  ? help  q quit"
 
-	eventCount := fmt.Sprintf("%d events", len(m.events))
+	eventCount := fmt.Sprintf("%d events", len(m.events)-m.hiddenBotCount)
+	if m.hiddenBotCount > 0 {
+		eventCount += fmt.Sprintf(" (+%d from bots, b shows)", m.hiddenBotCount)
+	}
 	if m.err != nil {
 		eventCount = errorStyle.Render(fmt.Sprintf("error: %v", m.err))
 	}
@@ -468,6 +473,31 @@ func (m *Model) refreshContent() {
 	}
 }
 
+// rebuildView rebuilds the display items after a view filter change and scrolls the kept selection into view.
+func (m *Model) rebuildView() {
+	m.rebuildItemsKeepingSelection()
+	m.refreshContent()
+	if m.initialized {
+		m.scrollToSelected()
+	}
+}
+
+// rebuildItemsKeepingSelection rebuilds the display items, keeping the selection on the same event when it is still visible.
+func (m *Model) rebuildItemsKeepingSelection() {
+	previous, hadSelection := m.selectedEvent()
+	m.buildDisplayItems()
+
+	m.selectedIdx = max(len(m.displayItems)-1, 0)
+	if hadSelection {
+		for i, item := range m.displayItems {
+			if item.primaryEvent.ID == previous.ID {
+				m.selectedIdx = i
+				break
+			}
+		}
+	}
+}
+
 // selectedEvent returns the primary event of the selected display item.
 func (m Model) selectedEvent() (event.Event, bool) {
 	if m.selectedIdx < 0 || m.selectedIdx >= len(m.displayItems) {
@@ -558,24 +588,39 @@ func (m *Model) checkMentions(newEvents []event.Event) {
 	}
 }
 
-// buildDisplayItems creates the list of visual display items from the raw
-// event list, grouping consecutive push events with the same author+commit.
+// visibleEvents returns the events that pass the view-time filters and records how many bot events were hidden.
+func (m *Model) visibleEvents() []event.Event {
+	m.hiddenBotCount = 0
+	visible := make([]event.Event, 0, len(m.events))
+	for _, e := range m.events {
+		if m.isFilteredBot(e) {
+			m.hiddenBotCount++
+			continue
+		}
+		visible = append(visible, e)
+	}
+	return visible
+}
+
+// buildDisplayItems creates the list of visual display items from the visible
+// events, grouping consecutive push events with the same author+commit.
 func (m *Model) buildDisplayItems() {
 	m.displayItems = m.displayItems[:0]
 	m.renderedBlocks = nil
-	for i := 0; i < len(m.events); {
-		e := m.events[i]
+	visible := m.visibleEvents()
+	for i := 0; i < len(visible); {
+		e := visible[i]
 		k, groupable := event.PushGroupKey(e)
 
 		if groupable {
 			refs := []string{e.PushData.Ref}
 			j := i + 1
-			for j < len(m.events) {
-				jk, ok := event.PushGroupKey(m.events[j])
+			for j < len(visible) {
+				jk, ok := event.PushGroupKey(visible[j])
 				if !ok || jk != k {
 					break
 				}
-				refs = append(refs, m.events[j].PushData.Ref)
+				refs = append(refs, visible[j].PushData.Ref)
 				j++
 			}
 			if len(refs) > 1 {
@@ -599,7 +644,7 @@ func (m *Model) SetFilters(projects, groups []string) {
 
 // isFilteredBot returns true for bot-authored events that should be hidden; bots mentioning the current user stay visible.
 func (m Model) isFilteredBot(e event.Event) bool {
-	return m.cfg != nil && m.cfg.FilterBots && event.IsBotUsername(e.AuthorUsername) && !event.HasMention(e.NoteBody)
+	return m.hideBots && event.IsBotUsername(e.AuthorUsername) && !event.HasMention(e.NoteBody)
 }
 
 // matchesFilter returns true if the event matches the configured project/group
@@ -637,7 +682,7 @@ func (m *Model) mergeEvents(newEvents []event.Event) []event.Event {
 		if m.clearedAt != nil && e.CreatedAt.Before(*m.clearedAt) {
 			continue
 		}
-		if !m.matchesFilter(e) || m.isFilteredBot(e) {
+		if !m.matchesFilter(e) {
 			continue
 		}
 		m.seenIDs[e.ID] = struct{}{}

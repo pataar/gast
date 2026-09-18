@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/pataar/gast/internal/config"
 	"github.com/pataar/gast/internal/event"
 )
@@ -186,32 +187,132 @@ func TestShouldSuppressNotifications(t *testing.T) {
 	})
 }
 
-func TestMergeEvents_FiltersBotsUnlessTheyMentionUser(t *testing.T) {
-	event.CurrentUser = "pieter"
-	t.Cleanup(func() { event.CurrentUser = "" })
-
-	events := []event.Event{
+// botTestEvents holds a human event, a plain bot event, and a bot event mentioning "pieter".
+func botTestEvents() []event.Event {
+	return []event.Event{
 		{ID: 1, AuthorUsername: "alice"},
 		{ID: 2, AuthorUsername: "renovate-bot", NoteBody: "updated deps"},
 		{ID: 3, AuthorUsername: "renovate-bot", NoteBody: "ping @pieter"},
 	}
+}
+
+// pressKey sends a single printable key press through Update and returns the resulting model.
+func pressKey(t *testing.T, m Model, pressed rune) Model {
+	t.Helper()
+	updated, _ := m.Update(tea.KeyPressMsg{Code: pressed, Text: string(pressed)})
+	return updated.(Model)
+}
+
+func TestBuildDisplayItems_HidesBotsUnlessTheyMentionUser(t *testing.T) {
+	event.CurrentUser = "pieter"
+	t.Cleanup(func() { event.CurrentUser = "" })
 
 	m := newTestModel()
-	m.cfg = &config.Config{FilterBots: true}
-	m.mergeEvents(events)
-	if len(m.events) != 2 {
-		t.Fatalf("filter on: got %d events, want 2 (human + mentioning bot)", len(m.events))
+	m.hideBots = true
+	// mergeEvents receives events newest-first.
+	m.mergeEvents(botTestEvents())
+	m.buildDisplayItems()
+
+	if len(m.events) != 3 {
+		t.Fatalf("got %d stored events, want 3 (hidden bot events stay in memory)", len(m.events))
 	}
-	for _, e := range m.events {
-		if e.ID == 2 {
-			t.Error("filter on: non-mentioning bot event was kept")
+	if len(m.displayItems) != 2 {
+		t.Fatalf("filter on: got %d display items, want 2 (human + mentioning bot)", len(m.displayItems))
+	}
+	for _, item := range m.displayItems {
+		if item.primaryEvent.ID == 2 {
+			t.Error("filter on: non-mentioning bot event is displayed")
 		}
 	}
+	if m.hiddenBotCount != 1 {
+		t.Errorf("hiddenBotCount = %d, want 1", m.hiddenBotCount)
+	}
 
-	m = newTestModel()
-	m.cfg = &config.Config{FilterBots: false}
-	m.mergeEvents(events)
-	if len(m.events) != 3 {
-		t.Fatalf("filter off: got %d events, want 3", len(m.events))
+	m.hideBots = false
+	m.buildDisplayItems()
+	if len(m.displayItems) != 3 {
+		t.Fatalf("filter off: got %d display items, want 3", len(m.displayItems))
+	}
+	if m.hiddenBotCount != 0 {
+		t.Errorf("filter off: hiddenBotCount = %d, want 0", m.hiddenBotCount)
+	}
+}
+
+func TestToggleBotsKey_TogglesFilterAndKeepsSelection(t *testing.T) {
+	event.CurrentUser = "pieter"
+	t.Cleanup(func() { event.CurrentUser = "" })
+
+	// NewModel sets event.CurrentUser from the config, so the username must be passed here.
+	m := NewDemoModel(&config.Config{FilterBots: true, Username: "pieter"}, nil)
+	if !m.hideBots {
+		t.Fatal("hideBots should start from the filter_bots config value")
+	}
+	m.mergeEvents(botTestEvents())
+	m.buildDisplayItems()
+	// Chronological order is 3, 2, 1; with bots hidden the items are [3, 1]. Select event 1.
+	m.selectedIdx = 1
+
+	m = pressKey(t, m, 'b')
+	if m.hideBots {
+		t.Fatal("pressing b should show bot events")
+	}
+	if len(m.displayItems) != 3 {
+		t.Fatalf("got %d display items after toggle, want 3", len(m.displayItems))
+	}
+	if selected, _ := m.selectedEvent(); selected.ID != 1 {
+		t.Errorf("selection moved to event %d, want it to stay on event 1", selected.ID)
+	}
+
+	// Select the plain bot event, then hide bots again: selection must stay in range.
+	m.selectedIdx = 1
+	m = pressKey(t, m, 'b')
+	if !m.hideBots {
+		t.Fatal("pressing b again should hide bot events")
+	}
+	if _, ok := m.selectedEvent(); !ok {
+		t.Errorf("selectedIdx %d is out of range after hiding the selected event", m.selectedIdx)
+	}
+}
+
+func TestClearKey_ResetsHiddenBotCount(t *testing.T) {
+	t.Cleanup(func() { event.CurrentUser = "" })
+
+	m := NewDemoModel(&config.Config{FilterBots: true, Username: "pieter"}, nil)
+	m.mergeEvents(botTestEvents())
+	m.buildDisplayItems()
+	if m.hiddenBotCount != 1 {
+		t.Fatalf("setup: hiddenBotCount = %d, want 1", m.hiddenBotCount)
+	}
+
+	m = pressKey(t, m, 'c')
+	if m.hiddenBotCount != 0 {
+		t.Errorf("hiddenBotCount = %d after clear, want 0", m.hiddenBotCount)
+	}
+}
+
+func TestEventsFetched_KeepsSelectionWhenOldEventsAreTrimmed(t *testing.T) {
+	sized, _ := NewDemoModel(&config.Config{}, nil).Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m := sized.(Model)
+	existing := make([]event.Event, maxEvents)
+	for i := range existing {
+		// mergeEvents receives events newest-first.
+		existing[i] = event.Event{ID: maxEvents - i, AuthorUsername: "alice"}
+	}
+	m.mergeEvents(existing)
+	m.buildDisplayItems()
+	m.selectedIdx = 299
+	if selected, _ := m.selectedEvent(); selected.ID != 300 {
+		t.Fatalf("setup: selected event %d, want 300", selected.ID)
+	}
+
+	newEvents := make([]event.Event, 10)
+	for i := range newEvents {
+		newEvents[i] = event.Event{ID: maxEvents + 10 - i, AuthorUsername: "bob"}
+	}
+	updated, _ := m.Update(EventsFetchedMsg{Events: newEvents})
+	m = updated.(Model)
+
+	if selected, _ := m.selectedEvent(); selected.ID != 300 {
+		t.Errorf("selected event %d after the fetch trimmed old events, want 300", selected.ID)
 	}
 }
