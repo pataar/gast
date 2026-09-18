@@ -273,3 +273,19 @@ func TestToggleBotsKey_TogglesFilterAndKeepsSelection(t *testing.T) {
 		t.Errorf("selectedIdx %d is out of range after hiding the selected event", m.selectedIdx)
 	}
 }
+
+func TestClearKey_ResetsHiddenBotCount(t *testing.T) {
+	t.Cleanup(func() { event.CurrentUser = "" })
+
+	m := NewDemoModel(&config.Config{FilterBots: true, Username: "pieter"}, nil)
+	m.mergeEvents(botTestEvents())
+	m.buildDisplayItems()
+	if m.hiddenBotCount != 1 {
+		t.Fatalf("setup: hiddenBotCount = %d, want 1", m.hiddenBotCount)
+	}
+
+	m = pressKey(t, m, 'c')
+	if m.hiddenBotCount != 0 {
+		t.Errorf("hiddenBotCount = %d after clear, want 0", m.hiddenBotCount)
+	}
+}
