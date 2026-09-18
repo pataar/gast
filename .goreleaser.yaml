@@ -4,7 +4,7 @@ builds:
   - binary: gast
     main: .
     ldflags:
-      - -s -w
+      - -s -w -X github.com/pataar/gast/cmd.version={{.Tag}}
     goos:
       - darwin
       - linux

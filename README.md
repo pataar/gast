@@ -107,6 +107,7 @@ The token needs the `read_api` scope (or `api`).
 --project            Filter to projects matching these names (comma-separated)
 --group              Filter to groups matching these prefixes (comma-separated)
 --demo               Run with fake data (no GitLab connection)
+--version            Print the version
 ```
 
 Priority order: CLI flags > environment variables > config file > defaults.
