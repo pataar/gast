@@ -401,6 +401,11 @@ func TestHasMention_RequiresUsernameBoundary(t *testing.T) {
 		{"@pieter-w is someone else", false},
 		{"@pieter.w is someone else", false},
 		{"@pieter2 and @pieter", true},
+		{"mail foo@pieter for access", false},
+		{"foo.bar@pieter", false},
+		{"foo@pieter and @pieter", true},
+		{"(@pieter)", true},
+		{"cc:@pieter", true},
 		{"no mention here", false},
 	}
 	for _, testCase := range cases {
