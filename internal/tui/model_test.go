@@ -357,3 +357,30 @@ func TestNextMentionKey_WithoutMentionsKeepsSelection(t *testing.T) {
 		t.Errorf("selectedIdx = %d, want 1", m.selectedIdx)
 	}
 }
+
+func TestEventsFetched_KeepsSelectionWhenOldEventsAreTrimmed(t *testing.T) {
+	sized, _ := NewDemoModel(&config.Config{}, nil).Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m := sized.(Model)
+	existing := make([]event.Event, maxEvents)
+	for i := range existing {
+		// mergeEvents receives events newest-first.
+		existing[i] = event.Event{ID: maxEvents - i, AuthorUsername: "alice"}
+	}
+	m.mergeEvents(existing)
+	m.buildDisplayItems()
+	m.selectedIdx = 299
+	if selected, _ := m.selectedEvent(); selected.ID != 300 {
+		t.Fatalf("setup: selected event %d, want 300", selected.ID)
+	}
+
+	newEvents := make([]event.Event, 10)
+	for i := range newEvents {
+		newEvents[i] = event.Event{ID: maxEvents + 10 - i, AuthorUsername: "bob"}
+	}
+	updated, _ := m.Update(EventsFetchedMsg{Events: newEvents})
+	m = updated.(Model)
+
+	if selected, _ := m.selectedEvent(); selected.ID != 300 {
+		t.Errorf("selected event %d after the fetch trimmed old events, want 300", selected.ID)
+	}
+}
