@@ -4,7 +4,7 @@ builds:
   - binary: gast
     main: .
     ldflags:
-      - -s -w
+      - -s -w -X github.com/pataar/gast/cmd.version={{.Tag}}
     goos:
       - darwin
       - linux
@@ -30,9 +30,20 @@ brews:
     description: GitLab Activity Stream TUI
 
 changelog:
+  use: github
   sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))?!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\(.+\))?!?:.+$'
+      order: 1
+    - title: Other
+      order: 999
   filters:
     exclude:
+      - '^build\(deps\):'
+      - "^chore:"
       - "^docs:"
       - "^test:"
-      - "^chore:"

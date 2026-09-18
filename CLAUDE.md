@@ -21,6 +21,7 @@ go vet ./...
 main.go                          # Entry point, delegates to cmd.Execute()
 cmd/
   root.go                        # Root cobra command, CLI flags, starts TUI
+  root_test.go                   # Tests for --version
   configure.go                   # `gast configure` interactive wizard
 internal/
   browser/open.go                # Cross-platform browser opening, URL construction

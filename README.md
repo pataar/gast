@@ -16,6 +16,7 @@
 - Open events or projects directly in the browser
 - @mention notifications (in-app badge + optional desktop alerts with sound and click-to-open)
 - Filter by project or group
+- Hides bot activity by default (bots that @mention you are still shown)
 - Mouse and keyboard navigation
 
 ### Desktop notifications (macOS)
@@ -62,7 +63,7 @@ Run the interactive configuration wizard:
 gast configure
 ```
 
-This prompts for your GitLab host, personal access token, poll interval, page size, full project path preference, and desktop notifications — validates everything (including a test API call) — and writes the config to `~/.config/gast/config.toml`.
+This prompts for your GitLab host, personal access token, poll interval, page size, bot filtering, full project path preference, and desktop notifications — validates everything (including a test API call) — and writes the config to `~/.config/gast/config.toml`.
 
 Then start the TUI:
 
@@ -106,6 +107,7 @@ The token needs the `read_api` scope (or `api`).
 --project            Filter to projects matching these names (comma-separated)
 --group              Filter to groups matching these prefixes (comma-separated)
 --demo               Run with fake data (no GitLab connection)
+--version            Print the version
 ```
 
 Priority order: CLI flags > environment variables > config file > defaults.
@@ -125,8 +127,8 @@ Projects match by substring, groups match by path prefix.
 
 | Key | Action |
 |---|---|
-| `j` / `k` | Select next / previous event |
-| `g` / `G` | Select first / last event |
+| `j` / `k` (or `↓` / `↑`) | Select next / previous event |
+| `g` / `G` (or `Home` / `End`) | Select first / last event |
 | `m` | Show only events that @mention you |
 | `n` | Select next @mention |
 | `o` / `Enter` | Open selected event in browser |
@@ -135,7 +137,7 @@ Projects match by substring, groups match by path prefix.
 | `c` | Clear events |
 | `r` | Force refresh |
 | `t` | Toggle relative / absolute timestamps |
-| `?` | Toggle help |
+| `?` | Toggle help (`Esc` closes it) |
 | `q` / `Ctrl+C` | Quit |
 
 Mouse wheel scrolling is also supported.
