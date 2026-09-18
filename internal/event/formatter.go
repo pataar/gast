@@ -167,8 +167,10 @@ func HasMention(text string) bool {
 		if idx < 0 {
 			return false
 		}
+		// "foo@pieter" is an address-like token, not a mention: the "@" must not follow a username character.
+		embedded := idx > 0 && (isUsernameChar(text[idx-1]) || text[idx-1] == '.' || text[idx-1] == '-')
 		text = text[idx+len(mention):]
-		if !continuesUsername(text) {
+		if !embedded && !continuesUsername(text) {
 			return true
 		}
 	}
@@ -180,8 +182,12 @@ func continuesUsername(rest string) bool {
 	if rest == "" {
 		return false
 	}
-	next := rest[0]
-	return next == '_' || next >= '0' && next <= '9' || next >= 'a' && next <= 'z' || next >= 'A' && next <= 'Z'
+	return isUsernameChar(rest[0])
+}
+
+// isUsernameChar reports whether c is a letter, digit, or underscore.
+func isUsernameChar(c byte) bool {
+	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
 // highlightMentions renders raw text with detailStyle, highlighting @CurrentUser mentions with mentionStyle.
