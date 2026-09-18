@@ -76,7 +76,7 @@ gast
 Config file location: `~/.config/gast/config.toml` (follows [XDG Base Directory](https://specifications.freedesktop.org/basedir-spec/latest/) on Linux/macOS, `%AppData%` on Windows).
 
 ```toml
-filter_bots = true  # hide bot activity, except bots that @mention you
+filter_bots = true  # hide bot activity, except bots that @mention you (toggle with `b`)
 gitlab_host = "https://gitlab.example.com"
 notifications = false
 page_size = 50
@@ -131,6 +131,7 @@ Projects match by substring, groups match by path prefix.
 | `g` / `G` (or `Home` / `End`) | Select first / last event |
 | `o` / `Enter` | Open selected event in browser |
 | `p` | Open project page in browser |
+| `b` | Show / hide bot activity |
 | `c` | Clear events |
 | `r` | Force refresh |
 | `t` | Toggle relative / absolute timestamps |
