@@ -158,7 +158,30 @@ func hasDetailTarget(targetType string) bool {
 
 // HasMention reports whether the text mentions the current user.
 func HasMention(text string) bool {
-	return CurrentUser != "" && strings.Contains(text, "@"+CurrentUser)
+	if CurrentUser == "" {
+		return false
+	}
+	mention := "@" + CurrentUser
+	for {
+		idx := strings.Index(text, mention)
+		if idx < 0 {
+			return false
+		}
+		text = text[idx+len(mention):]
+		if !continuesUsername(text) {
+			return true
+		}
+	}
+}
+
+// continuesUsername reports whether rest extends a GitLab username (letters, digits, "_", or "."/"-" followed by one of those), so "@pieter2" is not a mention of "pieter" but "@pieter." is.
+func continuesUsername(rest string) bool {
+	rest = strings.TrimLeft(rest, ".-")
+	if rest == "" {
+		return false
+	}
+	next := rest[0]
+	return next == '_' || next >= '0' && next <= '9' || next >= 'a' && next <= 'z' || next >= 'A' && next <= 'Z'
 }
 
 // highlightMentions renders raw text with detailStyle, highlighting @CurrentUser mentions with mentionStyle.
