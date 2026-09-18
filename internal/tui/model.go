@@ -251,8 +251,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clearedAt = &now
 			m.events = m.events[:0]
 			m.seenIDs = make(map[int]struct{})
-			m.displayItems = m.displayItems[:0]
-			m.renderedBlocks = nil
+			m.buildDisplayItems()
 			m.selectedIdx = 0
 			m.mentionCount = 0
 			m.refreshContent()

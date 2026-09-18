@@ -4,6 +4,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -24,6 +25,9 @@ var demoMode bool
 // projectFilters and groupFilters limit displayed events to matching projects/groups.
 var projectFilters, groupFilters []string
 
+// version is injected at release time via -ldflags; it stays empty for `go install` and local builds.
+var version string
+
 // rootCmd is the top-level cobra command that launches the TUI.
 var rootCmd = &cobra.Command{
 	Use:          "gast",
@@ -34,6 +38,8 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
+	rootCmd.Version = buildVersion()
+
 	rootCmd.Flags().StringVar(&cfgFile, "config", "", "config file (default ~/.config/gast/config.toml)")
 	rootCmd.Flags().String("host", "", "GitLab host URL")
 	rootCmd.Flags().String("token", "", "GitLab personal access token")
@@ -47,6 +53,17 @@ func init() {
 	viper.BindPFlag("token", rootCmd.Flags().Lookup("token"))
 	viper.BindPFlag("poll_interval", rootCmd.Flags().Lookup("interval"))
 	viper.BindPFlag("show_full_project_path", rootCmd.Flags().Lookup("full-project-path"))
+}
+
+// buildVersion returns the release version, falling back to the module version recorded by the Go toolchain.
+func buildVersion() string {
+	if version != "" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
+		return info.Main.Version
+	}
+	return "dev"
 }
 
 // run loads configuration, initializes the GitLab client, and starts the Bubble Tea program.

@@ -275,6 +275,22 @@ func TestToggleBotsKey_TogglesFilterAndKeepsSelection(t *testing.T) {
 	}
 }
 
+func TestClearKey_ResetsHiddenBotCount(t *testing.T) {
+	t.Cleanup(func() { event.CurrentUser = "" })
+
+	m := NewDemoModel(&config.Config{FilterBots: true, Username: "pieter"}, nil)
+	m.mergeEvents(botTestEvents())
+	m.buildDisplayItems()
+	if m.hiddenBotCount != 1 {
+		t.Fatalf("setup: hiddenBotCount = %d, want 1", m.hiddenBotCount)
+	}
+
+	m = pressKey(t, m, 'c')
+	if m.hiddenBotCount != 0 {
+		t.Errorf("hiddenBotCount = %d after clear, want 0", m.hiddenBotCount)
+	}
+}
+
 // mentionTestModel returns a demo model holding, oldest to newest: a mention (1), a plain event (2),
 // the user's own comment quoting their handle (3), a plain event (4), and another mention (5).
 func mentionTestModel(t *testing.T) Model {
