@@ -16,6 +16,7 @@ import (
 	"github.com/pataar/gast/internal/event"
 	"github.com/pataar/gast/internal/gitlab"
 	"github.com/pataar/gast/internal/notify"
+	"golang.org/x/text/cases"
 )
 
 // maxEvents is the upper bound on events kept in memory. Older events beyond
@@ -57,10 +58,12 @@ type Model struct {
 	projectFilters  []string   // filter events to these project path substrings
 	groupFilters    []string   // filter events to these group path prefixes
 	displayItems    []displayItem
-	hideBots        bool // view-time bot filter, toggled at runtime; starts from cfg.FilterBots
-	hiddenBotCount  int  // bot events currently hidden by hideBots
-	mentionsOnly    bool // view-time filter: show only events that @mention the current user
-	visibleCount    int  // events that pass the view-time filters
+	hideBots        bool   // view-time bot filter, toggled at runtime; starts from cfg.FilterBots
+	hiddenBotCount  int    // bot events currently hidden by hideBots
+	filterQuery     string // "/" text filter; stays active after the input is closed with enter
+	filtering       bool   // true while the filter input has focus and receives key presses
+	mentionsOnly    bool   // view-time filter: show only events that @mention the current user
+	visibleCount    int    // events that pass the view-time filters
 	selectedIdx     int
 	mentionCount    int // unread @mention count
 
@@ -186,7 +189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				pd.CommitTitle = msg.Title
 			}
 		}
-		m.buildDisplayItems()
+		m.rebuildItemsKeepingSelection()
 		m.refreshContent()
 
 	case TickMsg:
@@ -201,10 +204,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.filtering {
+			return m.updateFilterInput(msg)
+		}
 
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
+		case key.Matches(msg, m.keys.Filter):
+			m.filtering = true
+			return m, nil
+		case key.Matches(msg, m.keys.Close):
+			if m.filterQuery != "" {
+				m.filterQuery = ""
+				m.rebuildView()
+			}
+			return m, nil
 		case key.Matches(msg, m.keys.Help):
 			m.showHelp = true
 			m.viewport.SetContent(m.renderHelp())
@@ -360,7 +375,12 @@ func (m Model) renderDivider() string {
 }
 
 func (m Model) renderFooter() string {
-	left := " j/k select  o open  p project  r refresh  c clear  t time  ? help  q quit"
+	left := " j/k select  o open  p project  r refresh  c clear  t time  / filter  ? help  q quit"
+	if m.filtering {
+		left = " /" + m.filterQuery + "█  enter apply  esc clear"
+	} else if m.filterQuery != "" {
+		left = " /" + m.filterQuery + "  / edit  esc clear"
+	}
 
 	eventCount := fmt.Sprintf("%d events", m.visibleCount)
 	if m.hiddenBotCount > 0 {
@@ -375,6 +395,9 @@ func (m Model) renderFooter() string {
 
 func (m *Model) renderEvents() string {
 	if len(m.displayItems) == 0 {
+		if m.filterQuery != "" {
+			return "\n  No events match the filter. Press esc to clear it."
+		}
 		if m.mentionsOnly {
 			return "\n  No mentions. Press m to show all events."
 		}
@@ -487,6 +510,34 @@ func (m *Model) refreshContent() {
 	if m.initialized {
 		m.viewport.SetContent(m.renderEvents())
 	}
+}
+
+/*
+updateFilterInput handles keys while the filter input has focus: enter keeps the query, esc clears it,
+backspace deletes, and printable keys extend it.
+
+ponytail: append-only editing (no cursor movement or paste); swap in bubbles/textinput if that is missed —
+it was skipped because it adds the atotto/clipboard dependency.
+*/
+func (m Model) updateFilterInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	keyPress := msg.Key()
+	switch {
+	case msg.String() == "ctrl+c":
+		return m, tea.Quit
+	case key.Matches(msg, m.keys.ApplyFilter):
+		m.filtering = false
+	case key.Matches(msg, m.keys.Close):
+		m.filterQuery = ""
+		m.filtering = false
+	case keyPress.Code == tea.KeyBackspace:
+		if queryRunes := []rune(m.filterQuery); len(queryRunes) > 0 {
+			m.filterQuery = string(queryRunes[:len(queryRunes)-1])
+		}
+	default:
+		m.filterQuery += keyPress.Text
+	}
+	m.rebuildView()
+	return m, nil
 }
 
 // rebuildView rebuilds the display items after a view filter change and scrolls the kept selection into view.
@@ -613,10 +664,24 @@ func (m *Model) visibleEvents() []event.Event {
 		if m.mentionsOnly && !mentionsCurrentUser(e) {
 			continue
 		}
+		if m.filterQuery != "" && !matchesQuery(e, m.filterQuery) {
+			continue
+		}
 		visible = append(visible, e)
 	}
 	m.visibleCount = len(visible)
 	return visible
+}
+
+// matchesQuery reports whether any user-visible text of the event contains the query, ignoring case.
+func matchesQuery(e event.Event, query string) bool {
+	searchable := []string{e.ActionName, e.AuthorUsername, e.NoteBody, e.ProjectName, e.TargetTitle, e.TargetType}
+	if e.PushData != nil {
+		searchable = append(searchable, e.PushData.CommitTitle, e.PushData.Ref)
+	}
+	// Unicode case folding, so equivalents like σ/ς match.
+	fold := cases.Fold()
+	return strings.Contains(fold.String(strings.Join(searchable, "\n")), fold.String(query))
 }
 
 // mentionsCurrentUser reports whether someone else @mentioned the current user in the event.

@@ -384,3 +384,136 @@ func TestEventsFetched_KeepsSelectionWhenOldEventsAreTrimmed(t *testing.T) {
 		t.Errorf("selected event %d after the fetch trimmed old events, want 300", selected.ID)
 	}
 }
+
+// filterTestModel returns a demo model with three events from different authors and projects.
+func filterTestModel(t *testing.T) Model {
+	t.Helper()
+	m := NewDemoModel(&config.Config{}, nil)
+	m.mergeEvents([]event.Event{
+		{ID: 3, AuthorUsername: "bob", ProjectName: "acme/dashboard", TargetTitle: "Fix login redirect"},
+		{ID: 2, AuthorUsername: "alice", ProjectName: "acme/api", PushData: &event.PushData{Ref: "feature/quota", CommitTitle: "Add quota checks"}},
+		{ID: 1, AuthorUsername: "alice", ProjectName: "acme/dashboard", NoteBody: "Looks good to me"},
+	})
+	m.buildDisplayItems()
+	return m
+}
+
+func typeText(t *testing.T, m Model, text string) Model {
+	t.Helper()
+	for _, character := range text {
+		m = pressKey(t, m, character)
+	}
+	return m
+}
+
+func pressSpecialKey(t *testing.T, m Model, code rune) Model {
+	t.Helper()
+	updated, _ := m.Update(tea.KeyPressMsg{Code: code})
+	return updated.(Model)
+}
+
+func TestFilterKey_FiltersWhileTypingWithoutTriggeringOtherKeys(t *testing.T) {
+	m := filterTestModel(t)
+
+	// "q" and "c" are bound to quit and clear; while typing they must only extend the query.
+	m = typeText(t, m, "/quc")
+	if len(m.events) != 3 {
+		t.Fatalf("typing in the filter cleared the events: %d left", len(m.events))
+	}
+	if got := m.filterQuery; got != "quc" {
+		t.Fatalf("query = %q, want %q", got, "quc")
+	}
+
+	m = pressSpecialKey(t, m, tea.KeyBackspace)
+	m = pressSpecialKey(t, m, tea.KeyBackspace)
+	m = typeText(t, m, "UOTA")
+	if got := displayedIDs(m); !slices.Equal(got, []int{2}) {
+		t.Fatalf("query %q: displayed IDs = %v, want [2]", m.filterQuery, got)
+	}
+}
+
+func TestFilterKey_EnterKeepsQueryAndEscClearsIt(t *testing.T) {
+	m := filterTestModel(t)
+	m = typeText(t, m, "/dashboard")
+	m = pressSpecialKey(t, m, tea.KeyEnter)
+
+	if m.filtering {
+		t.Fatal("enter should leave the filter input")
+	}
+	if got := displayedIDs(m); !slices.Equal(got, []int{1, 3}) {
+		t.Fatalf("after enter: displayed IDs = %v, want [1 3]", got)
+	}
+
+	m.selectedIdx = 0
+	m = pressKey(t, m, 'j')
+	if selected, _ := m.selectedEvent(); selected.ID != 3 {
+		t.Fatalf("navigation inside filtered list: selected %d, want 3", selected.ID)
+	}
+
+	m = pressSpecialKey(t, m, tea.KeyEscape)
+	if got := displayedIDs(m); len(got) != 3 {
+		t.Fatalf("after esc: displayed IDs = %v, want all 3", got)
+	}
+	if selected, _ := m.selectedEvent(); selected.ID != 3 {
+		t.Errorf("after esc: selected %d, want selection to stay on 3", selected.ID)
+	}
+}
+
+func TestMatchesQuery(t *testing.T) {
+	pushEvent := event.Event{
+		ActionName: "pushed to", AuthorUsername: "alice", ProjectName: "acme/api",
+		PushData: &event.PushData{Ref: "feature/quota", CommitTitle: "Add quota checks"},
+	}
+	noteEvent := event.Event{
+		ActionName: "commented on", AuthorUsername: "bob", NoteBody: "Looks good",
+		TargetTitle: "Fix login redirect", TargetType: "MergeRequest",
+	}
+
+	cases := []struct {
+		name  string
+		event event.Event
+		query string
+		want  bool
+	}{
+		{"action", noteEvent, "commented", true},
+		{"author", pushEvent, "alice", true},
+		{"case insensitive", noteEvent, "LOGIN", true},
+		{"commit title", pushEvent, "quota checks", true},
+		{"no match", pushEvent, "bob", false},
+		{"note body", noteEvent, "looks good", true},
+		{"project", pushEvent, "acme/api", true},
+		{"ref", pushEvent, "feature/", true},
+		{"target type", noteEvent, "mergerequest", true},
+		{"unicode case folding", event.Event{TargetTitle: "ΟΣ"}, "ος", true},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := matchesQuery(testCase.event, testCase.query); got != testCase.want {
+				t.Errorf("matchesQuery(%q) = %v, want %v", testCase.query, got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestCommitTitleResolved_KeepsSelectionWhenItStartsMatchingTheFilter(t *testing.T) {
+	m := NewDemoModel(&config.Config{}, nil)
+	m.mergeEvents([]event.Event{
+		{ID: 2, AuthorUsername: "alice", TargetTitle: "Quota checks overview"},
+		{ID: 1, AuthorUsername: "bob", ProjectID: 7, PushData: &event.PushData{CommitTo: "abc123", Ref: "main", CommitTitle: "Add quota ch..."}},
+	})
+	m.filterQuery = "checks"
+	m.buildDisplayItems()
+	if got := displayedIDs(m); !slices.Equal(got, []int{2}) {
+		t.Fatalf("setup: displayed IDs = %v, want [2]", got)
+	}
+
+	updated, _ := m.Update(CommitTitleMsg{ProjectID: 7, SHA: "abc123", Title: "Add quota checks"})
+	m = updated.(Model)
+
+	if got := displayedIDs(m); !slices.Equal(got, []int{1, 2}) {
+		t.Fatalf("after title resolution: displayed IDs = %v, want [1 2]", got)
+	}
+	if selected, _ := m.selectedEvent(); selected.ID != 2 {
+		t.Errorf("selected event %d after the resolved title matched the filter, want 2", selected.ID)
+	}
+}

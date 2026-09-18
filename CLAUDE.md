@@ -39,7 +39,7 @@ internal/
     model_test.go                # Tests for TUI model
     messages.go                  # EventsFetchedMsg, FetchErrorMsg, TickMsg
     commands.go                  # fetchEventsCmd, tickCmd
-    keymap.go                    # Key bindings (j/k, o, p, r, t, b, c, m, n, ?, g/G, q)
+    keymap.go                    # Key bindings (j/k, o, p, r, t, b, c, m, n, /, ?, g/G, q)
     styles.go                    # Lipgloss style definitions
 ```
 
@@ -71,6 +71,7 @@ internal/
 - Event selection with cursor (j/k) — `o`/`Enter` opens in browser, `p` opens project
 - @mention detection with header badge + optional desktop notifications (`notifications = true`)
 - Mentions-only view (`m` key) and jump to next @mention (`n` key)
+- In-app text filter (`/` key): case-insensitive substring match, applied at view time
 - Togglable relative timestamps (`t` key)
 - Bot activity hidden at view time, togglable at runtime (`b` key); hidden events stay in memory
 - Project/group filtering via `--project` and `--group` CLI flags
