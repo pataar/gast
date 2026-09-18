@@ -153,20 +153,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.checkMentions(msg.Events)
 		}
 		added := m.mergeEvents(msg.Events)
-		oldItemCount := len(m.displayItems)
-		m.buildDisplayItems()
-		if m.initialized {
-			// Only auto-scroll to bottom if user was already at the end or this is the first fetch.
-			wasAtEnd := m.selectedIdx >= oldItemCount-1
-			if wasAtEnd && len(m.displayItems) > 0 {
-				m.selectedIdx = len(m.displayItems) - 1
-			}
-			m.refreshContent()
-			if wasAtEnd {
-				m.viewport.GotoBottom()
-			}
-		} else if len(m.displayItems) > 0 {
-			m.selectedIdx = len(m.displayItems) - 1
+		// Only follow new events if the user was already at the end (or nothing is laid out yet).
+		wasAtEnd := !m.initialized || m.selectedIdx >= len(m.displayItems)-1
+		m.rebuildItemsKeepingSelection()
+		if wasAtEnd {
+			m.selectedIdx = max(len(m.displayItems)-1, 0)
+		}
+		m.refreshContent()
+		if wasAtEnd && m.initialized {
+			m.viewport.GotoBottom()
 		}
 		// Lazily resolve truncated commit titles in the background.
 		cmds = append(cmds, m.resolveCommitTitles(added))
@@ -478,8 +473,17 @@ func (m *Model) refreshContent() {
 	}
 }
 
-// rebuildView rebuilds the display items after a view filter change, keeping the selection on the same event when it is still visible.
+// rebuildView rebuilds the display items after a view filter change and scrolls the kept selection into view.
 func (m *Model) rebuildView() {
+	m.rebuildItemsKeepingSelection()
+	m.refreshContent()
+	if m.initialized {
+		m.scrollToSelected()
+	}
+}
+
+// rebuildItemsKeepingSelection rebuilds the display items, keeping the selection on the same event when it is still visible.
+func (m *Model) rebuildItemsKeepingSelection() {
 	previous, hadSelection := m.selectedEvent()
 	m.buildDisplayItems()
 
@@ -491,11 +495,6 @@ func (m *Model) rebuildView() {
 				break
 			}
 		}
-	}
-
-	m.refreshContent()
-	if m.initialized {
-		m.scrollToSelected()
 	}
 }
 
