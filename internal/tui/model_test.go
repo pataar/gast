@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pataar/gast/internal/config"
 	"github.com/pataar/gast/internal/event"
 )
 
@@ -183,4 +184,34 @@ func TestShouldSuppressNotifications(t *testing.T) {
 			t.Error("should not suppress during normal fetch")
 		}
 	})
+}
+
+func TestMergeEvents_FiltersBotsUnlessTheyMentionUser(t *testing.T) {
+	event.CurrentUser = "pieter"
+	t.Cleanup(func() { event.CurrentUser = "" })
+
+	events := []event.Event{
+		{ID: 1, AuthorUsername: "alice"},
+		{ID: 2, AuthorUsername: "renovate-bot", NoteBody: "updated deps"},
+		{ID: 3, AuthorUsername: "renovate-bot", NoteBody: "ping @pieter"},
+	}
+
+	m := newTestModel()
+	m.cfg = &config.Config{FilterBots: true}
+	m.mergeEvents(events)
+	if len(m.events) != 2 {
+		t.Fatalf("filter on: got %d events, want 2 (human + mentioning bot)", len(m.events))
+	}
+	for _, e := range m.events {
+		if e.ID == 2 {
+			t.Error("filter on: non-mentioning bot event was kept")
+		}
+	}
+
+	m = newTestModel()
+	m.cfg = &config.Config{FilterBots: false}
+	m.mergeEvents(events)
+	if len(m.events) != 3 {
+		t.Fatalf("filter off: got %d events, want 3", len(m.events))
+	}
 }

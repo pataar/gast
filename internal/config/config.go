@@ -20,6 +20,7 @@ type Config struct {
 	PageSize        int           `mapstructure:"page_size"`
 	ShowFullProject bool          `mapstructure:"show_full_project_path"`
 	Notifications   bool          `mapstructure:"notifications"`
+	FilterBots      bool          `mapstructure:"filter_bots"`
 	Username        string        // Resolved at startup from the API; not persisted.
 }
 
@@ -55,6 +56,7 @@ func Load(cfgFile string) (*Config, error) {
 	viper.SetDefault("page_size", 50)
 	viper.SetDefault("show_full_project_path", false)
 	viper.SetDefault("notifications", false)
+	viper.SetDefault("filter_bots", true)
 
 	viper.BindEnv("gitlab_host", "GITLAB_ACTIVITY_HOST")
 	viper.BindEnv("token", "GITLAB_ACTIVITY_TOKEN")
@@ -74,6 +76,7 @@ func Load(cfgFile string) (*Config, error) {
 	cfg.PageSize = viper.GetInt("page_size")
 	cfg.ShowFullProject = viper.GetBool("show_full_project_path")
 	cfg.Notifications = viper.GetBool("notifications")
+	cfg.FilterBots = viper.GetBool("filter_bots")
 
 	interval := viper.GetString("poll_interval")
 	dur, err := time.ParseDuration(interval)

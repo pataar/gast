@@ -360,3 +360,23 @@ func TestAuthorStyleFor_Deterministic(t *testing.T) {
 	// but alice and bob are short enough that they almost certainly differ.
 	_ = style3 // just verify it doesn't panic
 }
+
+func TestIsBotUsername(t *testing.T) {
+	cases := map[string]bool{
+		"alice":                    false,
+		"abbot":                    false,
+		"bot-wrangler":             false,
+		"dependabot[bot]":          true,
+		"group_12_bot_abc123":      true,
+		"project_42_bot":           true,
+		"project_42_bot_9f8e7d":    true,
+		"renovate-bot":             true,
+		"Renovate_Bot":             true,
+		"service_account_deployer": true,
+	}
+	for username, want := range cases {
+		if got := IsBotUsername(username); got != want {
+			t.Errorf("IsBotUsername(%q) = %v, want %v", username, got, want)
+		}
+	}
+}
