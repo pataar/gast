@@ -484,6 +484,7 @@ func TestMatchesQuery(t *testing.T) {
 		{"project", pushEvent, "acme/api", true},
 		{"ref", pushEvent, "feature/", true},
 		{"target type", noteEvent, "mergerequest", true},
+		{"unicode case folding", event.Event{TargetTitle: "ΟΣ"}, "ος", true},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 	"github.com/pataar/gast/internal/event"
 	"github.com/pataar/gast/internal/gitlab"
 	"github.com/pataar/gast/internal/notify"
+	"golang.org/x/text/cases"
 )
 
 // maxEvents is the upper bound on events kept in memory. Older events beyond
@@ -678,7 +679,9 @@ func matchesQuery(e event.Event, query string) bool {
 	if e.PushData != nil {
 		searchable = append(searchable, e.PushData.CommitTitle, e.PushData.Ref)
 	}
-	return strings.Contains(strings.ToLower(strings.Join(searchable, "\n")), strings.ToLower(query))
+	// Unicode case folding, so equivalents like σ/ς match.
+	fold := cases.Fold()
+	return strings.Contains(fold.String(strings.Join(searchable, "\n")), fold.String(query))
 }
 
 // mentionsCurrentUser reports whether someone else @mentioned the current user in the event.
