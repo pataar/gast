@@ -242,7 +242,8 @@ func TestToggleBotsKey_TogglesFilterAndKeepsSelection(t *testing.T) {
 	event.CurrentUser = "pieter"
 	t.Cleanup(func() { event.CurrentUser = "" })
 
-	m := NewDemoModel(&config.Config{FilterBots: true}, nil)
+	// NewModel sets event.CurrentUser from the config, so the username must be passed here.
+	m := NewDemoModel(&config.Config{FilterBots: true, Username: "pieter"}, nil)
 	if !m.hideBots {
 		t.Fatal("hideBots should start from the filter_bots config value")
 	}
