@@ -59,6 +59,8 @@ type Model struct {
 	displayItems    []displayItem
 	hideBots        bool // view-time bot filter, toggled at runtime; starts from cfg.FilterBots
 	hiddenBotCount  int  // bot events currently hidden by hideBots
+	mentionsOnly    bool // view-time filter: show only events that @mention the current user
+	visibleCount    int  // events that pass the view-time filters
 	selectedIdx     int
 	mentionCount    int // unread @mention count
 
@@ -244,6 +246,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.GotoTop()
 			}
 			return m, nil
+		case key.Matches(msg, m.keys.NextMention):
+			m.mentionCount = 0
+			m.selectNextMention()
+			return m, nil
+		case key.Matches(msg, m.keys.ToggleMentions):
+			m.mentionsOnly = !m.mentionsOnly
+			m.rebuildView()
+			return m, nil
 		case key.Matches(msg, m.keys.ToggleBots):
 			m.hideBots = !m.hideBots
 			m.rebuildView()
@@ -335,6 +345,9 @@ func (m Model) renderHeader() string {
 	if m.mentionCount > 0 {
 		title += " " + mentionBadgeStyle.Render(fmt.Sprintf(" @%d ", m.mentionCount))
 	}
+	if m.mentionsOnly {
+		title += " " + mentionBadgeStyle.Render(" mentions only ")
+	}
 
 	right := ""
 	if m.fetching && (m.initialFetch || m.manualRefresh) {
@@ -355,7 +368,7 @@ func (m Model) renderDivider() string {
 func (m Model) renderFooter() string {
 	left := " j/k select  o open  p project  r refresh  c clear  t time  ? help  q quit"
 
-	eventCount := fmt.Sprintf("%d events", len(m.events)-m.hiddenBotCount)
+	eventCount := fmt.Sprintf("%d events", m.visibleCount)
 	if m.hiddenBotCount > 0 {
 		eventCount += fmt.Sprintf(" (+%d from bots, b shows)", m.hiddenBotCount)
 	}
@@ -368,6 +381,9 @@ func (m Model) renderFooter() string {
 
 func (m *Model) renderEvents() string {
 	if len(m.displayItems) == 0 {
+		if m.mentionsOnly {
+			return "\n  No mentions. Press m to show all events."
+		}
 		if m.clearedAt != nil {
 			return "\n  No events yet. Waiting for new events..."
 		}
@@ -572,10 +588,7 @@ func (m *Model) checkMentions(newEvents []event.Event) {
 		if _, seen := m.seenIDs[e.ID]; seen {
 			continue
 		}
-		if e.AuthorUsername == event.CurrentUser {
-			continue
-		}
-		if !event.HasMention(e.NoteBody) {
+		if !mentionsCurrentUser(e) {
 			continue
 		}
 		m.mentionCount++
@@ -599,9 +612,34 @@ func (m *Model) visibleEvents() []event.Event {
 			m.hiddenBotCount++
 			continue
 		}
+		if m.mentionsOnly && !mentionsCurrentUser(e) {
+			continue
+		}
 		visible = append(visible, e)
 	}
+	m.visibleCount = len(visible)
 	return visible
+}
+
+// mentionsCurrentUser reports whether someone else @mentioned the current user in the event.
+func mentionsCurrentUser(e event.Event) bool {
+	return e.AuthorUsername != event.CurrentUser && event.HasMention(e.NoteBody)
+}
+
+// selectNextMention moves the selection to the next event mentioning the current user, wrapping around at the end.
+func (m *Model) selectNextMention() {
+	itemCount := len(m.displayItems)
+	for step := 1; step <= itemCount; step++ {
+		candidate := (m.selectedIdx + step) % itemCount
+		if mentionsCurrentUser(m.displayItems[candidate].primaryEvent) {
+			m.selectedIdx = candidate
+			m.refreshContent()
+			if m.initialized {
+				m.scrollToSelected()
+			}
+			return
+		}
+	}
 }
 
 // buildDisplayItems creates the list of visual display items from the visible

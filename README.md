@@ -127,6 +127,8 @@ Projects match by substring, groups match by path prefix.
 |---|---|
 | `j` / `k` | Select next / previous event |
 | `g` / `G` | Select first / last event |
+| `m` | Show only events that @mention you |
+| `n` | Select next @mention |
 | `o` / `Enter` | Open selected event in browser |
 | `p` | Open project page in browser |
 | `b` | Show / hide bot activity |
