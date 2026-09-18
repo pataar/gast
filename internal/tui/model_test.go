@@ -494,3 +494,26 @@ func TestMatchesQuery(t *testing.T) {
 		})
 	}
 }
+
+func TestCommitTitleResolved_KeepsSelectionWhenItStartsMatchingTheFilter(t *testing.T) {
+	m := NewDemoModel(&config.Config{}, nil)
+	m.mergeEvents([]event.Event{
+		{ID: 2, AuthorUsername: "alice", TargetTitle: "Quota checks overview"},
+		{ID: 1, AuthorUsername: "bob", ProjectID: 7, PushData: &event.PushData{CommitTo: "abc123", Ref: "main", CommitTitle: "Add quota ch..."}},
+	})
+	m.filterQuery = "checks"
+	m.buildDisplayItems()
+	if got := displayedIDs(m); !slices.Equal(got, []int{2}) {
+		t.Fatalf("setup: displayed IDs = %v, want [2]", got)
+	}
+
+	updated, _ := m.Update(CommitTitleMsg{ProjectID: 7, SHA: "abc123", Title: "Add quota checks"})
+	m = updated.(Model)
+
+	if got := displayedIDs(m); !slices.Equal(got, []int{1, 2}) {
+		t.Fatalf("after title resolution: displayed IDs = %v, want [1 2]", got)
+	}
+	if selected, _ := m.selectedEvent(); selected.ID != 2 {
+		t.Errorf("selected event %d after the resolved title matched the filter, want 2", selected.ID)
+	}
+}

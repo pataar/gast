@@ -189,7 +189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				pd.CommitTitle = msg.Title
 			}
 		}
-		m.buildDisplayItems()
+		m.rebuildItemsKeepingSelection()
 		m.refreshContent()
 
 	case TickMsg:
