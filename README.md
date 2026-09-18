@@ -16,6 +16,7 @@
 - Open events or projects directly in the browser
 - @mention notifications (in-app badge + optional desktop alerts with sound and click-to-open)
 - Filter by project or group
+- In-app text filter (`/`) across author, project, title, comment, branch, and action
 - Mouse and keyboard navigation
 
 ### Desktop notifications (macOS)
@@ -131,6 +132,7 @@ Projects match by substring, groups match by path prefix.
 | `n` | Select next @mention |
 | `o` / `Enter` | Open selected event in browser |
 | `p` | Open project page in browser |
+| `/` | Filter events by text (`Enter` applies, `Esc` clears) |
 | `b` | Show / hide bot activity |
 | `c` | Clear events |
 | `r` | Force refresh |

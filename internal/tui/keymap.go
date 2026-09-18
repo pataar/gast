@@ -4,9 +4,11 @@ import "charm.land/bubbles/v2/key"
 
 // KeyMap defines all key bindings used by the TUI. Fields are ordered alphabetically for consistency.
 type KeyMap struct {
+	ApplyFilter    key.Binding
 	Clear          key.Binding
 	Close          key.Binding
 	Down           key.Binding
+	Filter         key.Binding
 	GoBottom       key.Binding
 	GoTop          key.Binding
 	Help           key.Binding
@@ -24,17 +26,25 @@ type KeyMap struct {
 // defaultKeyMap returns the default set of key bindings for navigation, refreshing, help, and quitting.
 func defaultKeyMap() KeyMap {
 	return KeyMap{
+		ApplyFilter: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "Apply filter"),
+		),
 		Clear: key.NewBinding(
 			key.WithKeys("c"),
 			key.WithHelp("c", "Clear events"),
 		),
 		Close: key.NewBinding(
 			key.WithKeys("esc"),
-			key.WithHelp("esc", "Close help"),
+			key.WithHelp("esc", "Close help / clear filter"),
 		),
 		Down: key.NewBinding(
 			key.WithKeys("j", "down"),
 			key.WithHelp("j / down", "Select next event"),
+		),
+		Filter: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "Filter events by text"),
 		),
 		GoBottom: key.NewBinding(
 			key.WithKeys("G", "end"),
@@ -91,6 +101,6 @@ func defaultKeyMap() KeyMap {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Down, k.Up, k.GoTop, k.GoBottom, k.NextMention},
-		{k.Open, k.OpenProject, k.Refresh, k.Clear, k.ToggleBots, k.ToggleMentions, k.ToggleTime, k.Help, k.Quit},
+		{k.Open, k.OpenProject, k.Refresh, k.Clear, k.Filter, k.Close, k.ToggleBots, k.ToggleMentions, k.ToggleTime, k.Help, k.Quit},
 	}
 }
